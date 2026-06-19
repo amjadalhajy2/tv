@@ -44,6 +44,9 @@
 </div>
 
 <script>
+    // ضَع رابط Cloudflare Worker الخاص بك هنا ليعمل كجسر عبور للبيانات والفيديو
+    const MY_PROXY_URL = 'https://orange-cloud-c75e.amjadalhajy2.workers.dev/';
+
     const video = document.getElementById('videoPlayer');
     const errorBox = document.getElementById('errorBox');
     let hls = new Hls();
@@ -77,56 +80,45 @@
         const listContainer = document.getElementById('videoList');
         listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال بنظام API الخاص بالمزود...</li>';
 
-        // ضَع رابط Cloudflare Worker الخاص بك هنا
-        const myProxyUrl = 'https://orange-cloud-c75e.amjadalhajy2.workers.dev/';
-        
-        // تغيير الرابط ليتوافق مع نظام Player API لجلب الأفلام (VOD)
         const apiUrl = `${host}/player_api.php?username=${user}&password=${pass}&action=get_vod_streams`;
-        const finalUrl = `${myProxyUrl}/?url=${encodeURIComponent(apiUrl)}`;
+        const finalUrl = `${MY_PROXY_URL}/?url=${encodeURIComponent(apiUrl)}`;
 
         try {
             const response = await fetch(finalUrl);
+            if (!response.ok) throw new Error(`مشكلة في الاتصال (الرمز: ${response.status})`);
             
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`مشكلة في الاتصال (الرمز: ${response.status})`);
-            }
+            const fetchedData = await response.json();
             
-            const fetchedData = await response.json(); // قراءة البيانات كـ JSON بدلاً من نص
-            
-            // التحقق من صحة الدخول
             if (fetchedData.user_info && fetchedData.user_info.auth === 0) {
                 listContainer.innerHTML = '<li></li>';
-                showError('بيانات الدخول (اسم المستخدم أو كلمة المرور) غير صحيحة.');
+                showError('بيانات الدخول غير صحيحة.');
                 return;
             }
 
             if (!Array.isArray(fetchedData) || fetchedData.length === 0) {
                 listContainer.innerHTML = '<li></li>';
-                showError('تم الاتصال بنجاح، ولكن قائمة الأفلام فارغة في هذا الاشتراك.');
+                showError('تم الاتصال بنجاح، ولكن قائمة الأفلام فارغة.');
                 return;
             }
 
             listContainer.innerHTML = '';
             document.getElementById('searchInput').style.display = 'block';
 
-            // تحويل استجابة API إلى قائمة أزرار
             fetchedData.forEach((item) => {
                 const li = document.createElement('li');
                 li.className = 'video-item';
-                li.innerText = item.name;
-                
-                // بناء الرابط المباشر للفيلم بناءً على هندسة Xtream Codes
+                // إظهار صيغة الملف بجانب اسم الفيلم لنعرف نوعه
                 const ext = item.container_extension ? item.container_extension : 'mp4';
-                const videoUrl = `${host}/movie/${user}/${pass}/${item.stream_id}.${ext}`;
+                li.innerText = `${item.name} (${ext})`;
                 
-                li.onclick = () => playVideo(videoUrl, li);
+                const videoUrl = `${host}/movie/${user}/${pass}/${item.stream_id}.${ext}`;
+                li.onclick = () => playVideo(videoUrl, li, ext);
                 listContainer.appendChild(li);
             });
 
         } catch (error) {
             listContainer.innerHTML = '<li></li>';
-            showError(`فشل الاتصال البرمجي: ${error.message} - تأكد من صحة رابط السيرفر والمنفذ.`);
+            showError(`فشل الاتصال: ${error.message}`);
         }
     }
 
@@ -138,24 +130,32 @@
         });
     }
 
-    function playVideo(url, element) {
+    function playVideo(url, element, ext) {
         hideError();
         document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
         element.classList.add('active-item');
 
-        // تشغيل الفيديو مباشرة
+        // تنبيه مسبق إذا كانت الصيغة mkv
+        if (ext.toLowerCase() === 'mkv' || ext.toLowerCase() === 'avi') {
+            showError(`تنبيه: المتصفحات لا تدعم تشغيل صيغة (${ext}) مباشرة. قد تسمع صوتاً بدون صورة أو يفشل التشغيل تماماً.`);
+        }
+
+        // تمرير رابط الفيديو نفسه عبر البروكسي لحل مشكلة (Mixed Content) وتمرير هوية التطبيق
+        const proxiedVideoUrl = `${MY_PROXY_URL}/?url=${encodeURIComponent(url)}`;
+
         if (Hls.isSupported() && url.includes('.m3u8')) {
             hls.destroy(); 
             hls = new Hls();
-            hls.loadSource(url);
+            hls.loadSource(proxiedVideoUrl);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, function() {
                 video.play();
             });
         } else {
-            // معظم الأفلام تأتي بصيغة mp4 أو mkv وتعمل مباشرة دون الحاجة لمكتبة HLS
-            video.src = url;
-            video.play().catch(e => showError('المتصفح يرفض تشغيل هذه الصيغة مباشرة أو أن المزود يحظر تشغيل الفيديو خارج تطبيقه.'));
+            video.src = proxiedVideoUrl;
+            video.play().catch(e => {
+                showError(`فشل التشغيل. السبب التقني: ${e.message || e.name}. المتصفح لا يستطيع قراءة ترميز هذا الفيلم.`);
+            });
         }
     }
 </script>
