@@ -100,9 +100,12 @@ async function loginXtream() {
             
             const fetchedData = await response.text();
             
-            if (fetchedData.includes("Invalid") || fetchedData.includes("Failed") || fetchedData.trim() === "") {
+// ملفات IPTV السليمة يجب أن تبدأ بكلمة #EXTM3U
+            if (!fetchedData.trim().startsWith("#EXTM3U")) {
                 listContainer.innerHTML = '<li></li>';
-                showError('المزود يرفض الاتصال: بيانات الدخول غير صحيحة أو حسابك منتهي.');
+                let providerReply = fetchedData.trim();
+                if(providerReply === "") providerReply = "(الخادم أرسل صفحة فارغة تماماً)";
+                showError(`المزود يرفض الدخول، وهذا هو رده الحقيقي: "${providerReply.substring(0, 150)}"`);
                 return;
             }
 
