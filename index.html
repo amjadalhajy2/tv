@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مشغل IPTV السحابي</title>
+    <title>مشغل IPTV (نسخة اختبار المزود)</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        /* تصميم بسيط ومريح للعين بدون ألوان كثيرة */
         body { font-family: Tahoma, sans-serif; background-color: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 900px; }
         
@@ -36,29 +36,21 @@
             <input type="text" id="xtUser" placeholder="اسم المستخدم (Username)">
             <input type="password" id="xtPass" placeholder="كلمة المرور (Password)">
         </div>
-        <button onclick="loginXtream()">تسجيل الدخول وجلب القائمة</button>
+        <button onclick="loginXtream()">جلب القائمة والتشغيل</button>
         <input type="text" id="searchInput" placeholder="ابحث عن فيلم أو قناة..." onkeyup="filterList()" style="display: none; margin-top: 10px;">
     </div>
 
     <video id="videoPlayer" controls></video>
 
     <ul id="videoList" class="video-list">
-        <li style="padding: 10px; color: #888;">أدخل بيانات Xtream الخاصة بك للبدء...</li>
+        <li style="padding: 10px; color: #888;">الرجاء إدخال بيانات الاشتراك للاتصال بالمزود...</li>
     </ul>
 </div>
 
 <script>
-    // --- إعدادات قاعدة البيانات (Supabase) ---
-    // الرجاء وضع الرابط والمفتاح الخاصين بمشروعك هنا لتعمل المزامنة
-    const SUPABASE_URL = 'ضع_رابط_سوبابيس_هنا';
-    const SUPABASE_KEY = 'ضع_مفتاح_سوبابيس_هنا';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
     const video = document.getElementById('videoPlayer');
     const errorBox = document.getElementById('errorBox');
     let hls = new Hls();
-    let currentVideoId = ''; 
-    let saveInterval = null;
 
     function showError(message) {
         errorBox.style.display = 'block';
@@ -77,26 +69,28 @@
         const pass = document.getElementById('xtPass').value.trim();
 
         if (!host || !user || !pass) {
-            showError('الرجاء إدخال جميع البيانات (الرابط، اسم المستخدم، كلمة المرور).');
+            showError('الرجاء إدخال جميع البيانات للاتصال.');
             return;
         }
 
         if (host.endsWith('/')) host = host.slice(0, -1);
         const m3uUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=m3u8`;
         const listContainer = document.getElementById('videoList');
-        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال وتجاوز حظر CORS...</li>';
+        
+        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال بالمزود وجلب البيانات...</li>';
 
         try {
-            // استخدام بروكسي لتجاوز حظر CORS عند العمل على GitHub
+            // استخدام AllOrigins Proxy لتجاوز الحظر من متصفحك أو استضافة GitHub
             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(m3uUrl)}`;
             const response = await fetch(proxyUrl);
             
             if (!response.ok) throw new Error(`رفض الخادم الاتصال (الرمز: ${response.status})`);
+            
             const data = await response.text();
             
             if (data.includes("Invalid") || data.includes("Failed") || data.trim() === "") {
                 listContainer.innerHTML = '<li></li>';
-                showError('بيانات الدخول غير صحيحة أو الخادم متوقف.');
+                showError('المزود يرفض الاتصال: بيانات الدخول غير صحيحة أو الخادم متوقف.');
                 return;
             }
 
@@ -105,22 +99,23 @@
             
             if (playlist.length === 0) {
                 listContainer.innerHTML = '<li></li>';
-                showError('تم الاتصال بنجاح ولكن لم يتم العثور على قنوات في اشتراكك.');
+                showError('تم الاتصال ولكن قائمة القنوات فارغة.');
                 return;
             }
 
             document.getElementById('searchInput').style.display = 'block';
+
             playlist.forEach((item) => {
                 const li = document.createElement('li');
                 li.className = 'video-item';
                 li.innerText = item.title;
-                li.onclick = () => playVideo(item.url, item.title, li);
+                li.onclick = () => playVideo(item.url, li);
                 listContainer.appendChild(li);
             });
 
         } catch (error) {
             listContainer.innerHTML = '<li></li>';
-            showError(`فشل الاتصال: تأكد من صحة الرابط أو أن مزود الخدمة لا يمنع البروكسيات. (${error.message})`);
+            showError(`فشل الاتصال: ${error.message} - قد يكون المزود الخاص بك يحظر طلبات البروكسي.`);
         }
     }
 
@@ -151,59 +146,33 @@
         });
     }
 
-    async function playVideo(url, title, element) {
+    function playVideo(url, element) {
         hideError();
         document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
         element.classList.add('active-item');
-
-        // تشفير اسم الفيلم ليكون معرفاً فريداً في قاعدة البيانات
-        currentVideoId = btoa(unescape(encodeURIComponent(title))).substring(0, 30); 
-        if (saveInterval) clearInterval(saveInterval);
 
         if (Hls.isSupported()) {
             hls.destroy(); 
             hls = new Hls();
             
             hls.on(Hls.Events.ERROR, function (event, data) {
-                if (data.fatal) showError('خطأ في تشغيل الفيديو: الشبكة ضعيفة أو الرابط معطل.');
+                if (data.fatal) {
+                    showError('خطأ من المزود أثناء التشغيل: الرابط معطل أو لا يسمح بالتشغيل عبر المتصفح.');
+                }
             });
 
             hls.loadSource(url);
             hls.attachMedia(video);
-            
-            hls.on(Hls.Events.MANIFEST_PARSED, async function() {
-                try {
-                    // جلب نقطة التوقف من سوبابيس
-                    const { data } = await supabase.from('user_progress').select('current_time').eq('video_id', currentVideoId).single();
-                    if (data && data.current_time) video.currentTime = data.current_time;
-                } catch (e) { console.log('لا يوجد سجل سابق أو سوبابيس غير متصل'); }
-                
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
                 video.play();
-                startTracking();
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            // لأجهزة الآيفون (سفاري)
             video.src = url;
-            video.addEventListener('loadedmetadata', async function() {
-                try {
-                    const { data } = await supabase.from('user_progress').select('current_time').eq('video_id', currentVideoId).single();
-                    if (data && data.current_time) video.currentTime = data.current_time;
-                } catch (e) {}
-                video.play();
-                startTracking();
+            video.addEventListener('error', function() {
+                showError('متصفحك لا يدعم تشغيل هذه الصيغة مباشرة.');
             });
+            video.play();
         }
-    }
-
-    function startTracking() {
-        saveInterval = setInterval(async () => {
-            if (!video.paused && currentVideoId) {
-                try {
-                    // رفع نقطة التوقف إلى سوبابيس كل 10 ثوان
-                    await supabase.from('user_progress').upsert({ video_id: currentVideoId, current_time: video.currentTime }, { onConflict: 'video_id' });
-                } catch (e) { console.error('خطأ في المزامنة:', e); }
-            }
-        }, 10000);
     }
 </script>
 
