@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <meta name="referrer" content="no-referrer">
+    
     <title>مشغل IPTV السحابي</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
@@ -14,11 +17,12 @@
         button { padding: 12px; border-radius: 4px; border: none; background-color: #444; color: white; cursor: pointer; font-weight: bold; }
         button:hover { background-color: #555; }
         #errorBox { display: none; background-color: #441111; color: #ff5555; padding: 15px; border-radius: 4px; border: 1px solid #ff5555; margin-bottom: 20px; font-weight: bold; }
-        video { width: 100%; background-color: #000; border-radius: 8px; margin-bottom: 20px; }
+        video { width: 100%; background-color: #000; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
         .video-list { max-height: 400px; overflow-y: auto; background-color: #1e1e1e; border-radius: 8px; padding: 10px; list-style: none; margin: 0; }
-        .video-item { padding: 12px; border-bottom: 1px solid #2d2d2d; cursor: pointer; }
+        .video-item { padding: 12px; border-bottom: 1px solid #2d2d2d; cursor: pointer; display: flex; justify-content: space-between; }
         .video-item:hover { background-color: #2a2a2a; }
         .active-item { background-color: #444 !important; font-weight: bold; border-right: 4px solid #fff; }
+        .direct-link-btn { background-color: #0056b3; padding: 5px 10px; border-radius: 4px; font-size: 12px; text-decoration: none; color: white; }
     </style>
 </head>
 <body>
@@ -27,24 +31,24 @@
     <div id="errorBox"></div>
 
     <div class="login-panel">
-        <input type="text" id="xtHost" placeholder="رابط الخادم (مثال: http://domain:port)">
+        <input type="text" id="xtHost" placeholder="رابط الخادم (يُفضل أن يبدأ بـ https://)">
         <div class="row">
-            <input type="text" id="xtUser" placeholder="اسم المستخدم (Username)">
-            <input type="password" id="xtPass" placeholder="كلمة المرور (Password)">
+            <input type="text" id="xtUser" placeholder="اسم المستخدم">
+            <input type="password" id="xtPass" placeholder="كلمة المرور">
         </div>
-        <button onclick="loginXtreamAPI()">جلب قائمة الأفلام والمسلسلات</button>
+        <button onclick="loginXtreamAPI()">جلب مكتبة الأفلام</button>
         <input type="text" id="searchInput" placeholder="ابحث عن فيلم..." onkeyup="filterList()" style="display: none; margin-top: 10px;">
     </div>
 
-    <video id="videoPlayer" controls></video>
+    <video id="videoPlayer" controls playsinline preload="auto" crossorigin="anonymous"></video>
 
     <ul id="videoList" class="video-list">
-        <li style="padding: 10px; color: #888;">أدخل البيانات واضغط جلب للاتصال بالمزود عبر API...</li>
+        <li style="padding: 10px; color: #888;">أدخل البيانات واضغط جلب...</li>
     </ul>
 </div>
 
 <script>
-    // ضَع رابط Cloudflare Worker الخاص بك هنا ليعمل كجسر عبور للبيانات والفيديو
+    // ضَع رابط Cloudflare Worker الخاص بك هنا
     const MY_PROXY_URL = 'https://orange-cloud-c75e.amjadalhajy2.workers.dev/';
 
     const video = document.getElementById('videoPlayer');
@@ -78,7 +82,7 @@
         if (host.endsWith('/')) host = host.slice(0, -1);
         
         const listContainer = document.getElementById('videoList');
-        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال بنظام API الخاص بالمزود...</li>';
+        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال...</li>';
 
         const apiUrl = `${host}/player_api.php?username=${user}&password=${pass}&action=get_vod_streams`;
         const finalUrl = `${MY_PROXY_URL}/?url=${encodeURIComponent(apiUrl)}`;
@@ -97,7 +101,7 @@
 
             if (!Array.isArray(fetchedData) || fetchedData.length === 0) {
                 listContainer.innerHTML = '<li></li>';
-                showError('تم الاتصال بنجاح، ولكن قائمة الأفلام فارغة.');
+                showError('قائمة الأفلام فارغة.');
                 return;
             }
 
@@ -107,13 +111,17 @@
             fetchedData.forEach((item) => {
                 const li = document.createElement('li');
                 li.className = 'video-item';
-                // إظهار صيغة الملف بجانب اسم الفيلم لنعرف نوعه
                 const ext = item.container_extension ? item.container_extension : 'mp4';
-                li.innerText = `${item.name} (${ext})`;
                 
-                // محاولة إجبار السيرفر على تقديم الفيلم كبث M3U8 متوافق مع المتصفحات
-const videoUrl = `${host}/live/${user}/${pass}/${item.stream_id}.m3u8`;
-                li.onclick = () => playVideo(videoUrl, li, ext);
+                // الرابط المباشر
+                const videoUrl = `${host}/movie/${user}/${pass}/${item.stream_id}.${ext}`;
+                
+                // بناء واجهة العنصر
+                li.innerHTML = `
+                    <span onclick="playSmartVideo('${videoUrl}', this, '${ext}')" style="flex: 1;">${item.name} (${ext})</span>
+                    <a href="${videoUrl}" target="_blank" class="direct-link-btn" title="اختبار الرابط الخارجي">🔗 فتح</a>
+                `;
+                
                 listContainer.appendChild(li);
             });
 
@@ -127,37 +135,52 @@ const videoUrl = `${host}/live/${user}/${pass}/${item.stream_id}.m3u8`;
         const query = document.getElementById('searchInput').value.toLowerCase();
         const items = document.querySelectorAll('.video-item');
         items.forEach(item => {
-            item.style.display = item.innerText.toLowerCase().includes(query) ? 'block' : 'none';
+            const text = item.innerText.toLowerCase();
+            item.style.display = text.includes(query) ? 'flex' : 'none';
         });
     }
 
-    function playVideo(url, element, ext) {
+    // دالة التشغيل الذكية (تجرب الطريقتين)
+    function playSmartVideo(url, elementSpan, ext) {
         hideError();
+        const liElement = elementSpan.parentElement;
         document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
-        element.classList.add('active-item');
+        liElement.classList.add('active-item');
 
-        // تنبيه مسبق إذا كانت الصيغة mkv
-        if (ext.toLowerCase() === 'mkv' || ext.toLowerCase() === 'avi') {
-            showError(`تنبيه: المتصفحات لا تدعم تشغيل صيغة (${ext}) مباشرة. قد تسمع صوتاً بدون صورة أو يفشل التشغيل تماماً.`);
+        if (ext.toLowerCase() !== 'mp4' && ext.toLowerCase() !== 'm3u8') {
+            showError(`تنبيه برمجـي: المتصفح لا يستطيع معالجة صيغة (${ext}) برمجياً. جرب فتح الرابط الخارجي.`);
+            return;
         }
 
-        // تمرير رابط الفيديو نفسه عبر البروكسي لحل مشكلة (Mixed Content) وتمرير هوية التطبيق
-        const proxiedVideoUrl = `${MY_PROXY_URL}/?url=${encodeURIComponent(url)}`;
-
-        if (Hls.isSupported() && url.includes('.m3u8')) {
-            hls.destroy(); 
-            hls = new Hls();
-            hls.loadSource(proxiedVideoUrl);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                video.play();
-            });
-        } else {
-            video.src = proxiedVideoUrl;
-            video.play().catch(e => {
-                showError(`فشل التشغيل. السبب التقني: ${e.message || e.name}. المتصفح لا يستطيع قراءة ترميز هذا الفيلم.`);
-            });
+        // إيقاف أي مشغل HLS سابق
+        if (hls) {
+            hls.destroy();
         }
+
+        // محاولة التشغيل المباشر أولاً
+        video.src = url;
+        video.play().catch(e => {
+            console.log("فشل التشغيل المباشر، جاري محاولة HLS...", e);
+            
+            // إذا فشل التشغيل المباشر، ربما يكون الملف M3U8 متخفي، نجرب HLS.js
+            if (Hls.isSupported()) {
+                hls = new Hls({ debug: false });
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.play().catch(err => {
+                        showError("فشل التشغيل المباشر و HLS. المشكلة في وصول المتصفح للملف.");
+                    });
+                });
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        showError(`فشل الاتصال برمجياً: الخادم رفض طلب المتصفح بشكل قاطع.`);
+                    }
+                });
+            } else {
+                showError(`المتصفح منع التشغيل.`);
+            }
+        });
     }
 </script>
 
