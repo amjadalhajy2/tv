@@ -111,7 +111,8 @@
                 const ext = item.container_extension ? item.container_extension : 'mp4';
                 li.innerText = `${item.name} (${ext})`;
                 
-                const videoUrl = `${host}/movie/${user}/${pass}/${item.stream_id}.${ext}`;
+                // محاولة إجبار السيرفر على تقديم الفيلم كبث M3U8 متوافق مع المتصفحات
+const videoUrl = `${host}/live/${user}/${pass}/${item.stream_id}.m3u8`;
                 li.onclick = () => playVideo(videoUrl, li, ext);
                 listContainer.appendChild(li);
             });
