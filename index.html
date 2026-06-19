@@ -77,52 +77,26 @@ async function loginXtream() {
         const m3uUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=m3u8`;
         const listContainer = document.getElementById('videoList');
         
-        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري محاولة تخطي حظر المزود وجلب القائمة...</li>';
+        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال عبر البروكسي الخاص...</li>';
 
-        // قائمة بـ 3 خوادم بروكسي مختلفة لتجربتها بالترتيب
-        const proxies = [
-            `https://corsproxy.io/?${encodeURIComponent(m3uUrl)}`,
-            `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(m3uUrl)}`,
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(m3uUrl)}`
-        ];
-
-        let fetchedData = null;
-        let connectionSuccess = false;
-
-        // محاولة الاتصال بالبروكسيات واحداً تلو الآخر
-        for (let i = 0; i < proxies.length; i++) {
-            try {
-                const response = await fetch(proxies[i]);
-                if (response.ok) {
-                    const text = await response.text();
-                    // التحقق من أن الاستجابة ليست رسالة خطأ من المزود
-                    if (!text.includes("Invalid") && !text.includes("Failed") && text.trim() !== "") {
-                        fetchedData = text;
-                        connectionSuccess = true;
-                        break; // نجح الاتصال، أوقف المحاولات
-                    }
-                }
-            } catch (error) {
-                console.log(`فشل البروكسي رقم ${i + 1}، جاري تجربة التالي...`);
-            }
-        }
-
-if (!connectionSuccess || !fetchedData) {
-            listContainer.innerHTML = '<li></li>';
-            showError('حماية المزود عالية جداً: تم حظر جميع محاولات البروكسي العامة.');
-            return;
-        }
-
-        // --- كود الاستكشاف الجديد ---
-        // ملفات IPTV يجب أن تبدأ دائماً بكلمة #EXTM3U
-        if (!fetchedData.trim().startsWith("#EXTM3U")) {
-            listContainer.innerHTML = '<li></li>';
-            showError(`تم الاتصال، ولكن الخادم رد بهذه الرسالة بدلاً من القنوات: "${fetchedData.substring(0, 150)}"`);
-            return;
-        }
-        // ------------------------
+        // ضَع رابط Cloudflare Worker الخاص بك هنا
+        const myProxyUrl = 'https://orange-cloud-c75e.amjadalhajy2.workers.dev/';
+        
+        const finalUrl = `${myProxyUrl}/?url=${encodeURIComponent(m3uUrl)}`;
 
         try {
+            const response = await fetch(finalUrl);
+            
+            if (!response.ok) throw new Error(`الخادم رفض الاتصال (الرمز: ${response.status})`);
+            
+            const fetchedData = await response.text();
+            
+            if (fetchedData.includes("Invalid") || fetchedData.includes("Failed") || fetchedData.trim() === "") {
+                listContainer.innerHTML = '<li></li>';
+                showError('المزود يرفض الاتصال: بيانات الدخول غير صحيحة أو حسابك منتهي.');
+                return;
+            }
+
             const playlist = parseM3U(fetchedData);
             listContainer.innerHTML = '';
             
@@ -144,7 +118,7 @@ if (!connectionSuccess || !fetchedData) {
 
         } catch (error) {
             listContainer.innerHTML = '<li></li>';
-            showError(`خطأ في قراءة البيانات: ${error.message}`);
+            showError(`فشل الاتصال: ${error.message}`);
         }
     }
 
