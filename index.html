@@ -107,11 +107,20 @@ async function loginXtream() {
             }
         }
 
-        if (!connectionSuccess || !fetchedData) {
+if (!connectionSuccess || !fetchedData) {
             listContainer.innerHTML = '<li></li>';
             showError('حماية المزود عالية جداً: تم حظر جميع محاولات البروكسي العامة.');
             return;
         }
+
+        // --- كود الاستكشاف الجديد ---
+        // ملفات IPTV يجب أن تبدأ دائماً بكلمة #EXTM3U
+        if (!fetchedData.trim().startsWith("#EXTM3U")) {
+            listContainer.innerHTML = '<li></li>';
+            showError(`تم الاتصال، ولكن الخادم رد بهذه الرسالة بدلاً من القنوات: "${fetchedData.substring(0, 150)}"`);
+            return;
+        }
+        // ------------------------
 
         try {
             const playlist = parseM3U(fetchedData);
