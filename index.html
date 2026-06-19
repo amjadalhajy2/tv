@@ -3,21 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مشغل IPTV (نسخة اختبار المزود)</title>
+    <title>مشغل IPTV السحابي</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        /* تصميم بسيط ومريح للعين بدون ألوان كثيرة */
         body { font-family: Tahoma, sans-serif; background-color: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 900px; }
-        
         .login-panel { background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
         .row { display: flex; gap: 10px; width: 100%; }
         input[type="text"], input[type="password"] { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #333; background-color: #252525; color: white; }
         button { padding: 12px; border-radius: 4px; border: none; background-color: #444; color: white; cursor: pointer; font-weight: bold; }
         button:hover { background-color: #555; }
-        
         #errorBox { display: none; background-color: #441111; color: #ff5555; padding: 15px; border-radius: 4px; border: 1px solid #ff5555; margin-bottom: 20px; font-weight: bold; }
-
         video { width: 100%; background-color: #000; border-radius: 8px; margin-bottom: 20px; }
         .video-list { max-height: 400px; overflow-y: auto; background-color: #1e1e1e; border-radius: 8px; padding: 10px; list-style: none; margin: 0; }
         .video-item { padding: 12px; border-bottom: 1px solid #2d2d2d; cursor: pointer; }
@@ -36,14 +32,14 @@
             <input type="text" id="xtUser" placeholder="اسم المستخدم (Username)">
             <input type="password" id="xtPass" placeholder="كلمة المرور (Password)">
         </div>
-        <button onclick="loginXtream()">جلب القائمة والتشغيل</button>
-        <input type="text" id="searchInput" placeholder="ابحث عن فيلم أو قناة..." onkeyup="filterList()" style="display: none; margin-top: 10px;">
+        <button onclick="loginXtreamAPI()">جلب قائمة الأفلام والمسلسلات</button>
+        <input type="text" id="searchInput" placeholder="ابحث عن فيلم..." onkeyup="filterList()" style="display: none; margin-top: 10px;">
     </div>
 
     <video id="videoPlayer" controls></video>
 
     <ul id="videoList" class="video-list">
-        <li style="padding: 10px; color: #888;">الرجاء إدخال بيانات الاشتراك للاتصال بالمزود...</li>
+        <li style="padding: 10px; color: #888;">أدخل البيانات واضغط جلب للاتصال بالمزود عبر API...</li>
     </ul>
 </div>
 
@@ -62,95 +58,76 @@
         errorBox.innerText = '';
     }
 
-async function loginXtream() {
+    async function loginXtreamAPI() {
         hideError();
         let host = document.getElementById('xtHost').value.trim();
         const user = document.getElementById('xtUser').value.trim();
         const pass = document.getElementById('xtPass').value.trim();
 
         if (!host || !user || !pass) {
-            showError('الرجاء إدخال جميع البيانات للاتصال.');
+            showError('الرجاء إدخال جميع البيانات.');
             return;
         }
 
-        // 1. المعالجة التلقائية: التأكد من وجود البروتوكول في الرابط
         if (!host.startsWith('http://') && !host.startsWith('https://')) {
             host = 'http://' + host; 
         }
         if (host.endsWith('/')) host = host.slice(0, -1);
         
-        const m3uUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=m3u8`;
         const listContainer = document.getElementById('videoList');
-        
-        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال عبر البروكسي الخاص...</li>';
+        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال بنظام API الخاص بالمزود...</li>';
 
         // ضَع رابط Cloudflare Worker الخاص بك هنا
         const myProxyUrl = 'https://orange-cloud-c75e.amjadalhajy2.workers.dev/';
         
-        const finalUrl = `${myProxyUrl}/?url=${encodeURIComponent(m3uUrl)}`;
+        // تغيير الرابط ليتوافق مع نظام Player API لجلب الأفلام (VOD)
+        const apiUrl = `${host}/player_api.php?username=${user}&password=${pass}&action=get_vod_streams`;
+        const finalUrl = `${myProxyUrl}/?url=${encodeURIComponent(apiUrl)}`;
 
         try {
             const response = await fetch(finalUrl);
             
-            // 2. كشف الخطأ الدقيق من Cloudflare إذا حدث
             if (!response.ok) {
-                const workerErrorText = await response.text();
-                throw new Error(`الخادم رفض الاتصال (الرمز: ${response.status}) | التفاصيل: ${workerErrorText}`);
+                const errText = await response.text();
+                throw new Error(`مشكلة في الاتصال (الرمز: ${response.status})`);
             }
             
-            const fetchedData = await response.text();
+            const fetchedData = await response.json(); // قراءة البيانات كـ JSON بدلاً من نص
             
-// ملفات IPTV السليمة يجب أن تبدأ بكلمة #EXTM3U
-            if (!fetchedData.trim().startsWith("#EXTM3U")) {
+            // التحقق من صحة الدخول
+            if (fetchedData.user_info && fetchedData.user_info.auth === 0) {
                 listContainer.innerHTML = '<li></li>';
-                let providerReply = fetchedData.trim();
-                if(providerReply === "") providerReply = "(الخادم أرسل صفحة فارغة تماماً)";
-                showError(`المزود يرفض الدخول، وهذا هو رده الحقيقي: "${providerReply.substring(0, 150)}"`);
+                showError('بيانات الدخول (اسم المستخدم أو كلمة المرور) غير صحيحة.');
                 return;
             }
 
-            const playlist = parseM3U(fetchedData);
+            if (!Array.isArray(fetchedData) || fetchedData.length === 0) {
+                listContainer.innerHTML = '<li></li>';
+                showError('تم الاتصال بنجاح، ولكن قائمة الأفلام فارغة في هذا الاشتراك.');
+                return;
+            }
+
             listContainer.innerHTML = '';
-            
-            if (playlist.length === 0) {
-                listContainer.innerHTML = '<li></li>';
-                showError('تم الاتصال ولكن قائمة القنوات فارغة.');
-                return;
-            }
-
             document.getElementById('searchInput').style.display = 'block';
 
-            playlist.forEach((item) => {
+            // تحويل استجابة API إلى قائمة أزرار
+            fetchedData.forEach((item) => {
                 const li = document.createElement('li');
                 li.className = 'video-item';
-                li.innerText = item.title;
-                li.onclick = () => playVideo(item.url, li);
+                li.innerText = item.name;
+                
+                // بناء الرابط المباشر للفيلم بناءً على هندسة Xtream Codes
+                const ext = item.container_extension ? item.container_extension : 'mp4';
+                const videoUrl = `${host}/movie/${user}/${pass}/${item.stream_id}.${ext}`;
+                
+                li.onclick = () => playVideo(videoUrl, li);
                 listContainer.appendChild(li);
             });
 
         } catch (error) {
             listContainer.innerHTML = '<li></li>';
-            showError(`تفاصيل المشكلة: ${error.message}`);
+            showError(`فشل الاتصال البرمجي: ${error.message} - تأكد من صحة رابط السيرفر والمنفذ.`);
         }
-    }
-
-    function parseM3U(data) {
-        const lines = data.split('\n');
-        const playlist = [];
-        let currentItem = null;
-
-        for (let i = 0; i < lines.length; i++) {
-            let line = lines[i].trim();
-            if (line.startsWith('#EXTINF:')) {
-                const titleMatch = line.match(/,(.+)$/);
-                currentItem = { title: titleMatch ? titleMatch[1] : 'بدون عنوان' };
-            } else if (line.startsWith('http') && currentItem) {
-                currentItem.url = line;
-                playlist.push(currentItem);
-                currentItem = null;
-            }
-        }
-        return playlist;
     }
 
     function filterList() {
@@ -166,27 +143,19 @@ async function loginXtream() {
         document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
         element.classList.add('active-item');
 
-        if (Hls.isSupported()) {
+        // تشغيل الفيديو مباشرة
+        if (Hls.isSupported() && url.includes('.m3u8')) {
             hls.destroy(); 
             hls = new Hls();
-            
-            hls.on(Hls.Events.ERROR, function (event, data) {
-                if (data.fatal) {
-                    showError('خطأ من المزود أثناء التشغيل: الرابط معطل أو لا يسمح بالتشغيل عبر المتصفح.');
-                }
-            });
-
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, function() {
                 video.play();
             });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        } else {
+            // معظم الأفلام تأتي بصيغة mp4 أو mkv وتعمل مباشرة دون الحاجة لمكتبة HLS
             video.src = url;
-            video.addEventListener('error', function() {
-                showError('متصفحك لا يدعم تشغيل هذه الصيغة مباشرة.');
-            });
-            video.play();
+            video.play().catch(e => showError('المتصفح يرفض تشغيل هذه الصيغة مباشرة أو أن المزود يحظر تشغيل الفيديو خارج تطبيقه.'));
         }
     }
 </script>
