@@ -141,46 +141,40 @@
     }
 
     // دالة التشغيل الذكية (تجرب الطريقتين)
-    function playSmartVideo(url, elementSpan, ext) {
+function playSmartVideo(url, elementSpan, ext) {
         hideError();
         const liElement = elementSpan.parentElement;
         document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
         liElement.classList.add('active-item');
 
         if (ext.toLowerCase() !== 'mp4' && ext.toLowerCase() !== 'm3u8') {
-            showError(`تنبيه برمجـي: المتصفح لا يستطيع معالجة صيغة (${ext}) برمجياً. جرب فتح الرابط الخارجي.`);
+            showError(`تنبيه: متصفحات الويب لا تدعم تشغيل صيغة (${ext}) نهائياً. يرجى اختيار فيلم بصيغة mp4.`);
             return;
         }
 
-        // إيقاف أي مشغل HLS سابق
-        if (hls) {
-            hls.destroy();
-        }
+        // إيقاف أي مشغل سابق
+        if (hls) hls.destroy();
 
-        // محاولة التشغيل المباشر أولاً
-        video.src = url;
-        video.play().catch(e => {
-            console.log("فشل التشغيل المباشر، جاري محاولة HLS...", e);
-            
-            // إذا فشل التشغيل المباشر، ربما يكون الملف M3U8 متخفي، نجرب HLS.js
-            if (Hls.isSupported()) {
-                hls = new Hls({ debug: false });
-                hls.loadSource(url);
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    video.play().catch(err => {
-                        showError("فشل التشغيل المباشر و HLS. المشكلة في وصول المتصفح للملف.");
-                    });
-                });
-                hls.on(Hls.Events.ERROR, function(event, data) {
-                    if (data.fatal) {
-                        showError(`فشل الاتصال برمجياً: الخادم رفض طلب المتصفح بشكل قاطع.`);
-                    }
-                });
-            } else {
-                showError(`المتصفح منع التشغيل.`);
-            }
-        });
+        // 🌟 تمرير رابط الفيديو نفسه عبر جسر Cloudflare لتخطي الـ User-Agent
+        const proxiedVideoUrl = `${MY_PROXY_URL}/?url=${encodeURIComponent(url)}`;
+
+        if (Hls.isSupported() && url.includes('.m3u8')) {
+            hls = new Hls({ debug: false });
+            hls.loadSource(proxiedVideoUrl);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                video.play().catch(e => console.log("تحتاج للتفاعل مع الصفحة للتشغيل"));
+            });
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) showError(`خطأ في البث: المتصفح لا يستطيع قراءة هذه القناة.`);
+            });
+        } else {
+            // تشغيل ملفات MP4 عبر البروكسي
+            video.src = proxiedVideoUrl;
+            video.play().catch(e => {
+                showError(`فشل التشغيل. إذا استمر الخطأ، قد يكون الفيلم مرمزاً بصيغة ثقيلة لا يدعمها المتصفح.`);
+            });
+        }
     }
 </script>
 
