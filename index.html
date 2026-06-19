@@ -73,7 +73,12 @@ async function loginXtream() {
             return;
         }
 
+        // 1. المعالجة التلقائية: التأكد من وجود البروتوكول في الرابط
+        if (!host.startsWith('http://') && !host.startsWith('https://')) {
+            host = 'http://' + host; 
+        }
         if (host.endsWith('/')) host = host.slice(0, -1);
+        
         const m3uUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=m3u8`;
         const listContainer = document.getElementById('videoList');
         
@@ -87,7 +92,11 @@ async function loginXtream() {
         try {
             const response = await fetch(finalUrl);
             
-            if (!response.ok) throw new Error(`الخادم رفض الاتصال (الرمز: ${response.status})`);
+            // 2. كشف الخطأ الدقيق من Cloudflare إذا حدث
+            if (!response.ok) {
+                const workerErrorText = await response.text();
+                throw new Error(`الخادم رفض الاتصال (الرمز: ${response.status}) | التفاصيل: ${workerErrorText}`);
+            }
             
             const fetchedData = await response.text();
             
@@ -118,7 +127,7 @@ async function loginXtream() {
 
         } catch (error) {
             listContainer.innerHTML = '<li></li>';
-            showError(`فشل الاتصال: ${error.message}`);
+            showError(`تفاصيل المشكلة: ${error.message}`);
         }
     }
 
