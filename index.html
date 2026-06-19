@@ -62,7 +62,7 @@
         errorBox.innerText = '';
     }
 
-    async function loginXtream() {
+async function loginXtream() {
         hideError();
         let host = document.getElementById('xtHost').value.trim();
         const user = document.getElementById('xtUser').value.trim();
@@ -77,24 +77,44 @@
         const m3uUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=m3u8`;
         const listContainer = document.getElementById('videoList');
         
-        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال بالمزود وجلب البيانات...</li>';
+        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري محاولة تخطي حظر المزود وجلب القائمة...</li>';
+
+        // قائمة بـ 3 خوادم بروكسي مختلفة لتجربتها بالترتيب
+        const proxies = [
+            `https://corsproxy.io/?${encodeURIComponent(m3uUrl)}`,
+            `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(m3uUrl)}`,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(m3uUrl)}`
+        ];
+
+        let fetchedData = null;
+        let connectionSuccess = false;
+
+        // محاولة الاتصال بالبروكسيات واحداً تلو الآخر
+        for (let i = 0; i < proxies.length; i++) {
+            try {
+                const response = await fetch(proxies[i]);
+                if (response.ok) {
+                    const text = await response.text();
+                    // التحقق من أن الاستجابة ليست رسالة خطأ من المزود
+                    if (!text.includes("Invalid") && !text.includes("Failed") && text.trim() !== "") {
+                        fetchedData = text;
+                        connectionSuccess = true;
+                        break; // نجح الاتصال، أوقف المحاولات
+                    }
+                }
+            } catch (error) {
+                console.log(`فشل البروكسي رقم ${i + 1}، جاري تجربة التالي...`);
+            }
+        }
+
+        if (!connectionSuccess || !fetchedData) {
+            listContainer.innerHTML = '<li></li>';
+            showError('حماية المزود عالية جداً: تم حظر جميع محاولات البروكسي العامة.');
+            return;
+        }
 
         try {
-            // استخدام AllOrigins Proxy لتجاوز الحظر من متصفحك أو استضافة GitHub
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(m3uUrl)}`;
-            const response = await fetch(proxyUrl);
-            
-            if (!response.ok) throw new Error(`رفض الخادم الاتصال (الرمز: ${response.status})`);
-            
-            const data = await response.text();
-            
-            if (data.includes("Invalid") || data.includes("Failed") || data.trim() === "") {
-                listContainer.innerHTML = '<li></li>';
-                showError('المزود يرفض الاتصال: بيانات الدخول غير صحيحة أو الخادم متوقف.');
-                return;
-            }
-
-            const playlist = parseM3U(data);
+            const playlist = parseM3U(fetchedData);
             listContainer.innerHTML = '';
             
             if (playlist.length === 0) {
@@ -115,7 +135,7 @@
 
         } catch (error) {
             listContainer.innerHTML = '<li></li>';
-            showError(`فشل الاتصال: ${error.message} - قد يكون المزود الخاص بك يحظر طلبات البروكسي.`);
+            showError(`خطأ في قراءة البيانات: ${error.message}`);
         }
     }
 
