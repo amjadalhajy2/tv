@@ -10,13 +10,14 @@
         body { font-family: Tahoma, sans-serif; background-color: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 900px; }
         
-        /* تصميم قسم تسجيل الدخول ليتناسب مع Xtream */
         .login-panel { background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
         .row { display: flex; gap: 10px; width: 100%; }
         input[type="text"], input[type="password"] { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #333; background-color: #252525; color: white; }
         button { padding: 12px; border-radius: 4px; border: none; background-color: #444; color: white; cursor: pointer; font-weight: bold; }
         button:hover { background-color: #555; }
         
+        #errorBox { display: none; background-color: #441111; color: #ff5555; padding: 15px; border-radius: 4px; border: 1px solid #ff5555; margin-bottom: 20px; font-weight: bold; }
+
         video { width: 100%; background-color: #000; border-radius: 8px; margin-bottom: 20px; }
         .video-list { max-height: 400px; overflow-y: auto; background-color: #1e1e1e; border-radius: 8px; padding: 10px; list-style: none; margin: 0; }
         .video-item { padding: 12px; border-bottom: 1px solid #2d2d2d; cursor: pointer; }
@@ -27,6 +28,8 @@
 <body>
 
 <div class="container">
+    <div id="errorBox"></div>
+
     <div class="login-panel">
         <input type="text" id="xtHost" placeholder="رابط الخادم (مثال: http://domain:port)">
         <div class="row">
@@ -45,39 +48,55 @@
 </div>
 
 <script>
-   // const SUPABASE_URL = 'ضع_رابط_سوبابيس';
-   // const SUPABASE_KEY = 'ضع_مفتاح_سوبابيس';
-   // const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // --- إعدادات قاعدة البيانات (Supabase) ---
+    // الرجاء وضع الرابط والمفتاح الخاصين بمشروعك هنا لتعمل المزامنة
+    const SUPABASE_URL = 'ضع_رابط_سوبابيس_هنا';
+    const SUPABASE_KEY = 'ضع_مفتاح_سوبابيس_هنا';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const video = document.getElementById('videoPlayer');
+    const errorBox = document.getElementById('errorBox');
     let hls = new Hls();
     let currentVideoId = ''; 
     let saveInterval = null;
 
+    function showError(message) {
+        errorBox.style.display = 'block';
+        errorBox.innerText = message;
+    }
+
+    function hideError() {
+        errorBox.style.display = 'none';
+        errorBox.innerText = '';
+    }
+
     async function loginXtream() {
+        hideError();
         let host = document.getElementById('xtHost').value.trim();
         const user = document.getElementById('xtUser').value.trim();
         const pass = document.getElementById('xtPass').value.trim();
 
-        if (!host || !user || !pass) return alert('الرجاء إدخال جميع البيانات');
+        if (!host || !user || !pass) {
+            showError('الرجاء إدخال جميع البيانات (الرابط، اسم المستخدم، كلمة المرور).');
+            return;
+        }
 
-        // تنظيف الرابط (إزالة الشرطة المائلة من النهاية إذا قام المستخدم بكتابتها)
         if (host.endsWith('/')) host = host.slice(0, -1);
-
-        // تحويل بيانات Xtream إلى رابط M3U متوافق
         const m3uUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=m3u8`;
-
         const listContainer = document.getElementById('videoList');
-        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال بالخادم وجلب القائمة...</li>';
+        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال وتجاوز حظر CORS...</li>';
 
         try {
+            // استخدام بروكسي لتجاوز حظر CORS عند العمل على GitHub
             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(m3uUrl)}`;
             const response = await fetch(proxyUrl);
+            
+            if (!response.ok) throw new Error(`رفض الخادم الاتصال (الرمز: ${response.status})`);
             const data = await response.text();
             
-            // التحقق مما إذا كانت بيانات الدخول خاطئة
             if (data.includes("Invalid") || data.includes("Failed") || data.trim() === "") {
-                listContainer.innerHTML = '<li style="color: #ff5555;">خطأ: بيانات الدخول غير صحيحة أو الخادم متوقف.</li>';
+                listContainer.innerHTML = '<li></li>';
+                showError('بيانات الدخول غير صحيحة أو الخادم متوقف.');
                 return;
             }
 
@@ -85,12 +104,12 @@
             listContainer.innerHTML = '';
             
             if (playlist.length === 0) {
-                listContainer.innerHTML = '<li>لم يتم العثور على محتوى.</li>';
+                listContainer.innerHTML = '<li></li>';
+                showError('تم الاتصال بنجاح ولكن لم يتم العثور على قنوات في اشتراكك.');
                 return;
             }
 
             document.getElementById('searchInput').style.display = 'block';
-
             playlist.forEach((item) => {
                 const li = document.createElement('li');
                 li.className = 'video-item';
@@ -100,8 +119,8 @@
             });
 
         } catch (error) {
-            console.error(error);
-            listContainer.innerHTML = '<li style="color: #ff5555;">فشل الاتصال بالخادم. تأكد من صحة الرابط.</li>';
+            listContainer.innerHTML = '<li></li>';
+            showError(`فشل الاتصال: تأكد من صحة الرابط أو أن مزود الخدمة لا يمنع البروكسيات. (${error.message})`);
         }
     }
 
@@ -133,29 +152,43 @@
     }
 
     async function playVideo(url, title, element) {
+        hideError();
         document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
         element.classList.add('active-item');
 
+        // تشفير اسم الفيلم ليكون معرفاً فريداً في قاعدة البيانات
         currentVideoId = btoa(unescape(encodeURIComponent(title))).substring(0, 30); 
         if (saveInterval) clearInterval(saveInterval);
 
         if (Hls.isSupported()) {
             hls.destroy(); 
             hls = new Hls();
+            
+            hls.on(Hls.Events.ERROR, function (event, data) {
+                if (data.fatal) showError('خطأ في تشغيل الفيديو: الشبكة ضعيفة أو الرابط معطل.');
+            });
+
             hls.loadSource(url);
             hls.attachMedia(video);
             
             hls.on(Hls.Events.MANIFEST_PARSED, async function() {
-                const { data } = await supabase.from('user_progress').select('current_time').eq('video_id', currentVideoId).single();
-                if (data && data.current_time) video.currentTime = data.current_time;
+                try {
+                    // جلب نقطة التوقف من سوبابيس
+                    const { data } = await supabase.from('user_progress').select('current_time').eq('video_id', currentVideoId).single();
+                    if (data && data.current_time) video.currentTime = data.current_time;
+                } catch (e) { console.log('لا يوجد سجل سابق أو سوبابيس غير متصل'); }
+                
                 video.play();
                 startTracking();
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // لأجهزة الآيفون (سفاري)
             video.src = url;
             video.addEventListener('loadedmetadata', async function() {
-                const { data } = await supabase.from('user_progress').select('current_time').eq('video_id', currentVideoId).single();
-                if (data && data.current_time) video.currentTime = data.current_time;
+                try {
+                    const { data } = await supabase.from('user_progress').select('current_time').eq('video_id', currentVideoId).single();
+                    if (data && data.current_time) video.currentTime = data.current_time;
+                } catch (e) {}
                 video.play();
                 startTracking();
             });
@@ -165,7 +198,10 @@
     function startTracking() {
         saveInterval = setInterval(async () => {
             if (!video.paused && currentVideoId) {
-                await supabase.from('user_progress').upsert({ video_id: currentVideoId, current_time: video.currentTime }, { onConflict: 'video_id' });
+                try {
+                    // رفع نقطة التوقف إلى سوبابيس كل 10 ثوان
+                    await supabase.from('user_progress').upsert({ video_id: currentVideoId, current_time: video.currentTime }, { onConflict: 'video_id' });
+                } catch (e) { console.error('خطأ في المزامنة:', e); }
             }
         }, 10000);
     }
