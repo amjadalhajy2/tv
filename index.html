@@ -3,174 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <meta name="referrer" content="no-referrer">
-    
-    <title>مشغل IPTV السحابي</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <title>تطبيق IPTV الذكي</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: Tahoma, sans-serif; background-color: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 900px; }
-        .login-panel { background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
-        .row { display: flex; gap: 10px; width: 100%; }
-        input[type="text"], input[type="password"] { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #333; background-color: #252525; color: white; }
-        button { padding: 12px; border-radius: 4px; border: none; background-color: #444; color: white; cursor: pointer; font-weight: bold; }
-        button:hover { background-color: #555; }
-        #errorBox { display: none; background-color: #441111; color: #ff5555; padding: 15px; border-radius: 4px; border: 1px solid #ff5555; margin-bottom: 20px; font-weight: bold; }
-        video { width: 100%; background-color: #000; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
-        .video-list { max-height: 400px; overflow-y: auto; background-color: #1e1e1e; border-radius: 8px; padding: 10px; list-style: none; margin: 0; }
-        .video-item { padding: 12px; border-bottom: 1px solid #2d2d2d; cursor: pointer; display: flex; justify-content: space-between; }
-        .video-item:hover { background-color: #2a2a2a; }
-        .active-item { background-color: #444 !important; font-weight: bold; border-right: 4px solid #fff; }
-        .direct-link-btn { background-color: #0056b3; padding: 5px 10px; border-radius: 4px; font-size: 12px; text-decoration: none; color: white; }
+        body { background-color: #111; color: white; font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+        input { padding: 10px; margin: 5px; width: 80%; max-width: 300px; border-radius: 5px; border: none; }
+        button { background: #e50914; color: white; border: none; padding: 10px 20px; margin-top: 10px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .hidden { display: none; }
+        .movie-card { background: #222; margin: 10px; padding: 15px; border-radius: 8px; display: inline-block; width: 200px; }
+        .movie-card img { width: 100%; border-radius: 5px; height: 250px; object-fit: cover; }
+        .progress-bar { height: 5px; background: #555; margin-top: 10px; border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #e50914; width: 0%; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div id="errorBox"></div>
-
-    <div class="login-panel">
-        <input type="text" id="xtHost" placeholder="رابط الخادم (يُفضل أن يبدأ بـ https://)">
-        <div class="row">
-            <input type="text" id="xtUser" placeholder="اسم المستخدم">
-            <input type="password" id="xtPass" placeholder="كلمة المرور">
-        </div>
-        <button onclick="loginXtreamAPI()">جلب مكتبة الأفلام</button>
-        <input type="text" id="searchInput" placeholder="ابحث عن فيلم..." onkeyup="filterList()" style="display: none; margin-top: 10px;">
+    <div id="login-screen">
+        <h2>تسجيل الدخول للاشتراك</h2>
+        <input type="text" id="xtream-domain" placeholder="رابط السيرفر (مثال: http://domain.com:8080)"><br>
+        <input type="text" id="xtream-user" placeholder="اسم المستخدم"><br>
+        <input type="password" id="xtream-pass" placeholder="كلمة المرور"><br>
+        <button onclick="saveCredentialsAndLogin()">دخول وحفظ البيانات</button>
     </div>
 
-<video id="videoPlayer" controls playsinline preload="auto" style="width: 100%; border-radius: 8px; background: #000;"></video>
-    <ul id="videoList" class="video-list">
-        <li style="padding: 10px; color: #888;">أدخل البيانات واضغط جلب...</li>
-    </ul>
-</div>
+    <div id="main-screen" class="hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>مكتبة الأفلام</h2>
+            <button onclick="logout()" style="background: #555;">تسجيل خروج</button>
+        </div>
+        <div id="movies-container">جاري تحميل المكتبة...</div>
+    </div>
 
 <script>
-    // ضَع رابط Cloudflare Worker الخاص بك هنا
-    const MY_PROXY_URL = 'https://orange-cloud-c75e.amjadalhajy2.workers.dev/';
+    // ==========================================
+    // 1. إعدادات Supabase (ضع مفاتيحك هنا)
+    // ==========================================
+    const SUPABASE_URL = 'https://kpfymvtyqbyjmlqfgujo.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc'; // ضع مفتاحك هنا
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const video = document.getElementById('videoPlayer');
-    const errorBox = document.getElementById('errorBox');
-    let hls = new Hls();
+    // متغيرات الجلسة
+    let currentUser = '';
+    let currentDomain = '';
+    let currentPass = '';
+    let currentMovieId = null; // الفيلم المشغل حالياً
 
-    function showError(message) {
-        errorBox.style.display = 'block';
-        errorBox.innerText = message;
-    }
+    // ==========================================
+    // 2. نظام تسجيل الدخول والحفظ المحلي
+    // ==========================================
+    window.onload = function() {
+        // التحقق مما إذا كانت البيانات محفوظة في الهاتف (localStorage)
+        const savedUser = localStorage.getItem('xtream_user');
+        const savedPass = localStorage.getItem('xtream_pass');
+        const savedDomain = localStorage.getItem('xtream_domain');
 
-    function hideError() {
-        errorBox.style.display = 'none';
-        errorBox.innerText = '';
-    }
+        if (savedUser && savedPass && savedDomain) {
+            currentUser = savedUser;
+            currentPass = savedPass;
+            currentDomain = savedDomain;
+            showMainScreen();
+        }
+    };
 
-    async function loginXtreamAPI() {
-        hideError();
-        let host = document.getElementById('xtHost').value.trim();
-        const user = document.getElementById('xtUser').value.trim();
-        const pass = document.getElementById('xtPass').value.trim();
+    function saveCredentialsAndLogin() {
+        const domain = document.getElementById('xtream-domain').value;
+        const user = document.getElementById('xtream-user').value;
+        const pass = document.getElementById('xtream-pass').value;
 
-        if (!host || !user || !pass) {
-            showError('الرجاء إدخال جميع البيانات.');
+        if (!domain || !user || !pass) {
+            alert("يرجى تعبئة جميع الحقول!");
             return;
         }
 
-        if (!host.startsWith('http://') && !host.startsWith('https://')) {
-            host = 'http://' + host; 
-        }
-        if (host.endsWith('/')) host = host.slice(0, -1);
+        // حفظ البيانات في ذاكرة المتصفح (ستبقى محفوظة داخل تطبيق الآيفون)
+        localStorage.setItem('xtream_domain', domain);
+        localStorage.setItem('xtream_user', user);
+        localStorage.setItem('xtream_pass', pass);
+
+        currentUser = user;
+        currentPass = pass;
+        currentDomain = domain;
+        showMainScreen();
+    }
+
+    function logout() {
+        localStorage.clear();
+        location.reload();
+    }
+
+    function showMainScreen() {
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('main-screen').classList.remove('hidden');
+        fetchMovies("15"); // جلب تصنيف الأفلام كمثال
+    }
+
+    // ==========================================
+    // 3. جلب مكتبة Xtream ودمجها مع بيانات Supabase
+    // ==========================================
+    async function fetchMovies(categoryId) {
+        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=get_vod_streams&category_id=${categoryId}`;
         
-        const listContainer = document.getElementById('videoList');
-        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال...</li>';
-
-        const apiUrl = `${host}/player_api.php?username=${user}&password=${pass}&action=get_vod_streams`;
-        const finalUrl = `${MY_PROXY_URL}/?url=${encodeURIComponent(apiUrl)}`;
-
         try {
-            const response = await fetch(finalUrl);
-            if (!response.ok) throw new Error(`مشكلة في الاتصال (الرمز: ${response.status})`);
-            
-            const fetchedData = await response.json();
-            
-            if (fetchedData.user_info && fetchedData.user_info.auth === 0) {
-                listContainer.innerHTML = '<li></li>';
-                showError('بيانات الدخول غير صحيحة.');
-                return;
-            }
+            // جلب الأفلام من سيرفر البث
+            const xtreamResponse = await fetch(apiUrl);
+            const movies = await xtreamResponse.json();
 
-            if (!Array.isArray(fetchedData) || fetchedData.length === 0) {
-                listContainer.innerHTML = '<li></li>';
-                showError('قائمة الأفلام فارغة.');
-                return;
-            }
+            // جلب تاريخ المشاهدات للمستخدم الحالي من Supabase
+            const { data: userActivity, error } = await supabase
+                .from('user_activity')
+                .select('*')
+                .eq('username', currentUser);
 
-            listContainer.innerHTML = '';
-            document.getElementById('searchInput').style.display = 'block';
-
-            fetchedData.forEach((item) => {
-                const li = document.createElement('li');
-                li.className = 'video-item';
-                const ext = item.container_extension ? item.container_extension : 'mp4';
-                
-                // الرابط المباشر
-                const videoUrl = `${host}/movie/${user}/${pass}/${item.stream_id}.${ext}`;
-                
-                // بناء واجهة العنصر
-                li.innerHTML = `
-                    <span onclick="playSmartVideo('${videoUrl}', this, '${ext}')" style="flex: 1;">${item.name} (${ext})</span>
-                    <a href="${videoUrl}" target="_blank" class="direct-link-btn" title="اختبار الرابط الخارجي">🔗 فتح</a>
-                `;
-                
-                listContainer.appendChild(li);
-            });
-
+            displayMovies(movies.slice(0, 20), userActivity || []); // عرض أول 20 فيلم للتبسيط
         } catch (error) {
-            listContainer.innerHTML = '<li></li>';
-            showError(`فشل الاتصال: ${error.message}`);
+            document.getElementById('movies-container').innerText = "حدث خطأ أثناء الاتصال بالخادم.";
         }
     }
 
-    function filterList() {
-        const query = document.getElementById('searchInput').value.toLowerCase();
-        const items = document.querySelectorAll('.video-item');
-        items.forEach(item => {
-            const text = item.innerText.toLowerCase();
-            item.style.display = text.includes(query) ? 'flex' : 'none';
+    function displayMovies(movies, userActivity) {
+        const container = document.getElementById('movies-container');
+        container.innerHTML = '';
+
+        movies.forEach(movie => {
+            // البحث إذا كان المستخدم قد شاهد هذا الفيلم من قبل
+            const activity = userActivity.find(act => act.movie_id == movie.stream_id);
+            const resumeTime = activity ? activity.resume_time : 0;
+            const isFav = activity ? activity.is_favorite : false;
+
+            const streamExtension = movie.container_extension || "mkv";
+            const videoUrl = `${currentDomain}/movie/${currentUser}/${currentPass}/${movie.stream_id}.${streamExtension}`;
+
+            // شريط التقدم (كشكل توضيحي، بافتراض أن مدة الفيلم 7200 ثانية - ساعتين)
+            const progressPercent = resumeTime > 0 ? Math.min((resumeTime / 7200) * 100, 100) : 0;
+
+            const movieEl = document.createElement('div');
+            movieEl.className = 'movie-card';
+            movieEl.innerHTML = `
+                <img src="${movie.stream_icon}" onerror="this.src='default_poster.jpg'">
+                <h3 style="font-size: 14px;">${movie.name}</h3>
+                
+                ${resumeTime > 0 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${progressPercent}%"></div></div><small style="color:#aaa;">تمت المشاهدة جزئياً</small>` : ''}
+                
+                <button onclick="playMovieInApp('${videoUrl}', ${resumeTime}, '${movie.stream_id}')">
+                    ${resumeTime > 0 ? 'إكمال المشاهدة' : 'تشغيل الفيلم'}
+                </button>
+                <button onclick="toggleFavorite('${movie.stream_id}', ${!isFav})" style="background: ${isFav ? '#f39c12' : '#333'};">
+                    ${isFav ? '★ مفضل' : '☆ أضف للمفضلة'}
+                </button>
+            `;
+            container.appendChild(movieEl);
         });
     }
 
-    // دالة التشغيل الذكية (تجرب الطريقتين)
-function playSmartVideo(url, elementSpan, ext) {
-        hideError();
-        const liElement = elementSpan.parentElement;
-        document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
-        liElement.classList.add('active-item');
+    // ==========================================
+    // 4. الجسر للتواصل مع تطبيق الآيفون + المزامنة
+    // ==========================================
+    function playMovieInApp(videoUrl, resumeTime, movieId) {
+        currentMovieId = movieId;
+        
+        const message = { type: 'PLAY_MOVIE', url: videoUrl, resumeTime: resumeTime };
 
-        if (ext.toLowerCase() !== 'mp4' && ext.toLowerCase() !== 'm3u8') {
-            showError(`تنبيه: المتصفح لا يدعم تشغيل صيغة (${ext}) برمجياً. استخدم الزر الأزرق لفتحه خارجياً.`);
-            return;
-        }
-
-        if (hls) hls.destroy();
-
-        if (Hls.isSupported() && url.includes('.m3u8')) {
-            // قنوات البث المباشر (m3u8) صغيرة الحجم، لذا يمكننا تمريرها عبر البروكسي لحل مشاكل CORS
-            const proxiedVideoUrl = `${MY_PROXY_URL}/?url=${encodeURIComponent(url)}`;
-            hls = new Hls({ debug: false });
-            hls.loadSource(proxiedVideoUrl);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                video.play().catch(e => console.log("تحتاج للتفاعل مع الصفحة للتشغيل"));
-            });
+        if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify(message));
         } else {
-            // الأفلام (MP4) ضخمة وتكسر حاجز Cloudflare، لذا نشغلها مباشرة من خادم المزود!
-            video.src = url;
-            video.play().catch(e => {
-                showError(`إذا لم يشتغل الفيلم هنا ولكنه اشتغل من الزر الأزرق، فهذا يعني أن المتصفح يمنع دمج محتوى (HTTP) داخل صفحة (HTTPS). جرب وضع https:// في رابط الخادم.`);
-            });
+            alert("محاكاة: تشغيل الفيلم من الثانية " + resumeTime);
+        }
+    }
+
+    // هذه الدالة سيستدعيها تطبيق الآيفون برمجياً كل 5 ثوانٍ
+    window.updateWatchProgress = async function(currentSeconds) {
+        if (!currentMovieId || !currentUser) return;
+
+        // تحديث أو إدخال الوقت في قاعدة بيانات Supabase
+        const { error } = await supabase
+            .from('user_activity')
+            .upsert({ 
+                username: currentUser, 
+                movie_id: currentMovieId, 
+                resume_time: currentSeconds 
+            }, { onConflict: 'username, movie_id' }); // تأكد من إعداد Unique Constraint في Supabase
+    };
+
+    // دالة لحفظ/إزالة الفيلم من المفضلة
+    async function toggleFavorite(movieId, makeFavorite) {
+        const { error } = await supabase
+            .from('user_activity')
+            .upsert({ 
+                username: currentUser, 
+                movie_id: movieId, 
+                is_favorite: makeFavorite 
+            }, { onConflict: 'username, movie_id' });
+
+        if (!error) {
+            fetchMovies("15"); // إعادة تحميل القائمة لتحديث شكل الأزرار
         }
     }
 </script>
-
 </body>
 </html>
