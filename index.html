@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق IPTV الذكي</title>
+    <title>تطبيق IPTV الذكي - المنصة الشاملة</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { 
@@ -31,10 +31,12 @@
             border-radius: 5px; 
             font-weight: bold; 
             cursor: pointer; 
+            transition: 0.3s;
         }
-        .hidden { 
-            display: none; 
-        }
+        button:hover { background: #b20710; }
+        .hidden { display: none; }
+        
+        /* تنسيق كروت العرض */
         .movie-card { 
             background: #222; 
             margin: 10px; 
@@ -62,12 +64,41 @@
             background: #e50914; 
             width: 0%; 
         }
+        
+        /* تنسيقات الأقسام العلوية والبحث */
         .header-bar {
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
-            max-width: 800px; 
+            max-width: 900px; 
             margin: 0 auto 20px auto;
+        }
+        .tabs-container {
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            background: #333;
+            margin: 0 5px;
+            font-size: 16px;
+        }
+        .tab-btn.active {
+            background: #e50914;
+        }
+        .filters-bar {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .search-box {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            background: #222;
+            color: white;
         }
     </style>
 </head>
@@ -83,14 +114,21 @@
 
     <div id="main-screen" class="hidden">
         <div class="header-bar">
-            <h2>مكتبة الأفلام</h2>
+            <h2>مكتبة البث</h2>
             <button onclick="logout()" style="background: #555;">تسجيل خروج</button>
         </div>
         
-        <div style="margin-bottom: 20px;">
-            <select id="category-selector" onchange="fetchMovies(this.value)">
-                <option value="">جاري تحميل التصنيفات...</option>
+        <div class="tabs-container">
+            <button id="btn-vod" class="tab-btn active" onclick="switchMode('vod')">🎬 أفلام</button>
+            <button id="btn-series" class="tab-btn" onclick="switchMode('series')">📺 مسلسلات</button>
+            <button id="btn-live" class="tab-btn" onclick="switchMode('live')">📡 قنوات مباشرة</button>
+        </div>
+
+        <div class="filters-bar">
+            <select id="category-selector" onchange="fetchContent(this.value)">
+                <option value="">جاري التحميل...</option>
             </select>
+            <input type="text" id="search-input" class="search-box" placeholder="ابحث عن فيلم، مسلسل، أو قناة..." onkeyup="filterResults()">
         </div>
 
         <div id="movies-container">جاري تحميل المكتبة...</div>
@@ -98,7 +136,7 @@
 
 <script>
     // ==========================================
-    // 1. إعدادات Supabase (ضع مفاتيحك هنا)
+    // 1. إعدادات Supabase ومربعات المتغيرات
     // ==========================================
     const SUPABASE_URL = 'https://kpfymvtyqbyjmlqfgujo.supabase.co'; 
     const SUPABASE_ANON_KEY = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc'; 
@@ -110,8 +148,12 @@
     let currentPass = '';
     let currentMovieId = null; 
 
+    // متغيرات النظام الجديد
+    let currentMode = 'vod'; // يمكن أن تكون: vod, series, live
+    let allCurrentData = []; // لحفظ البيانات للبحث السريع محلياً
+
     // ==========================================
-    // 2. نظام تسجيل الدخول
+    // 2. نظام الدخول والحفظ
     // ==========================================
     window.onload = function() {
         const savedUser = localStorage.getItem('xtream_user');
@@ -156,30 +198,52 @@
     function showMainScreen() {
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-screen').classList.remove('hidden');
-        // بدلاً من جلب رقم 15، نقوم بجلب قائمة التصنيفات أولاً
-        fetchCategories(); 
+        switchMode('vod'); // البدء دائماً بقسم الأفلام
     }
 
     // ==========================================
-    // 3. جلب التصنيفات (الجديد)
+    // 3. التنقل بين الأقسام (أفلام، مسلسلات، مباشر)
+    // ==========================================
+    function switchMode(mode) {
+        currentMode = mode;
+        
+        // تغيير شكل الأزرار النشطة
+        document.getElementById('btn-vod').classList.remove('active');
+        document.getElementById('btn-series').classList.remove('active');
+        document.getElementById('btn-live').classList.remove('active');
+        document.getElementById(`btn-${mode}`).classList.add('active');
+
+        // تفريغ صندوق البحث
+        document.getElementById('search-input').value = '';
+
+        fetchCategories();
+    }
+
+    // ==========================================
+    // 4. جلب التصنيفات ديناميكياً حسب القسم المختار
     // ==========================================
     async function fetchCategories() {
-        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=get_vod_categories`;
+        let action = '';
+        if (currentMode === 'vod') action = 'get_vod_categories';
+        else if (currentMode === 'series') action = 'get_series_categories';
+        else if (currentMode === 'live') action = 'get_live_categories';
+
+        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=${action}`;
         
         try {
             const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error("فشل الاتصال بسيرفر التصنيفات");
+            if (!response.ok) throw new Error("فشل الاتصال");
             
             const categories = await response.json();
             const selector = document.getElementById('category-selector');
-            selector.innerHTML = ''; // تفريغ القائمة
+            selector.innerHTML = ''; 
 
             if (categories.length === 0) {
-                selector.innerHTML = '<option value="">لا توجد تصنيفات في اشتراكك</option>';
+                selector.innerHTML = '<option value="">لا توجد باقات متاحة</option>';
+                document.getElementById('movies-container').innerHTML = '';
                 return;
             }
 
-            // إضافة التصنيفات للقائمة المنسدلة
             categories.forEach(cat => {
                 const option = document.createElement('option');
                 option.value = cat.category_id;
@@ -187,78 +251,145 @@
                 selector.appendChild(option);
             });
 
-            // جلب أفلام أول تصنيف تلقائياً
-            fetchMovies(categories[0].category_id);
+            // جلب محتوى أول باقة في القائمة تلقائياً
+            fetchContent(categories[0].category_id);
 
         } catch (error) {
-            console.error("خطأ في جلب التصنيفات:", error);
             document.getElementById('category-selector').innerHTML = '<option value="">حدث خطأ في تحميل التصنيفات</option>';
         }
     }
 
     // ==========================================
-    // 4. جلب الأفلام بناءً على التصنيف المختار
+    // 5. جلب المحتوى (قنوات، أفلام، مسلسلات)
     // ==========================================
-    async function fetchMovies(categoryId) {
+    async function fetchContent(categoryId) {
         if (!categoryId) return;
-        document.getElementById('movies-container').innerText = "جاري تحميل الأفلام...";
+        document.getElementById('movies-container').innerText = "جاري تحميل المحتوى...";
         
-        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=get_vod_streams&category_id=${categoryId}`;
+        let action = '';
+        if (currentMode === 'vod') action = 'get_vod_streams';
+        else if (currentMode === 'series') action = 'get_series';
+        else if (currentMode === 'live') action = 'get_live_streams';
+
+        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=${action}&category_id=${categoryId}`;
         
         try {
             const xtreamResponse = await fetch(apiUrl);
-            const movies = await xtreamResponse.json();
+            allCurrentData = await xtreamResponse.json(); // حفظ البيانات في المصفوفة للبحث السريع
 
-            const { data: userActivity, error } = await supabaseClient
+            const { data: userActivity } = await supabaseClient
                 .from('user_activity')
                 .select('*')
                 .eq('username', currentUser);
 
-            displayMovies(movies.slice(0, 50), userActivity || []); // رفعنا العدد لـ 50 فيلم
+            // عرض النتائج (أول 100 عنصر للسرعة)
+            renderDisplay(allCurrentData.slice(0, 100), userActivity || []); 
         } catch (error) {
             document.getElementById('movies-container').innerText = "حدث خطأ أثناء الاتصال بالخادم.";
         }
     }
 
-    function displayMovies(movies, userActivity) {
+    // ==========================================
+    // 6. نظام البحث الفوري
+    // ==========================================
+    function filterResults() {
+        const query = document.getElementById('search-input').value.toLowerCase();
+        
+        // فلترة المصفوفة المحفوظة مسبقاً بناءً على الاسم المعروض
+        const filteredData = allCurrentData.filter(item => {
+            const title = item.name ? item.name.toLowerCase() : "";
+            return title.includes(query);
+        });
+
+        // جلب بيانات سوبابيس (محاكاة سريعة بدون إعادة طلب لسرعة البحث)
+        renderDisplay(filteredData.slice(0, 100), []); 
+    }
+
+    // ==========================================
+    // 7. محرك الرسم الديناميكي للواجهة
+    // ==========================================
+    function renderDisplay(items, userActivity) {
         const container = document.getElementById('movies-container');
         container.innerHTML = '';
 
-        if (!movies || movies.length === 0) {
-            container.innerText = "لا توجد أفلام في هذا التصنيف.";
+        if (!items || items.length === 0) {
+            container.innerText = "لا يوجد محتوى في هذا التصنيف أو مطابق لبحثك.";
             return;
         }
 
-        movies.forEach(movie => {
-            const activity = userActivity.find(act => act.movie_id == movie.stream_id);
+        items.forEach(item => {
+            // توحيد المتغيرات لأن أسماء البيانات تختلف بين الأفلام والمسلسلات والقنوات
+            const id = item.stream_id || item.series_id;
+            const name = item.name;
+            const icon = item.stream_icon || item.cover || 'https://via.placeholder.com/200x250?text=بدون+صورة';
+            
+            const activity = userActivity.find(act => act.movie_id == id);
             const resumeTime = activity ? activity.resume_time : 0;
             const isFav = activity ? activity.is_favorite : false;
-
-            const streamExtension = movie.container_extension || "mkv";
-            const videoUrl = `${currentDomain}/movie/${currentUser}/${currentPass}/${movie.stream_id}.${streamExtension}`;
             const progressPercent = resumeTime > 0 ? Math.min((resumeTime / 7200) * 100, 100) : 0;
 
-            const movieEl = document.createElement('div');
-            movieEl.className = 'movie-card';
-            movieEl.innerHTML = `
-                <img src="${movie.stream_icon}" onerror="this.src='https://via.placeholder.com/200x250?text=بدون+صورة'">
-                <h3 style="font-size: 14px;">${movie.name}</h3>
-                
-                ${resumeTime > 0 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${progressPercent}%"></div></div><small style="color:#aaa;">تمت المشاهدة جزئياً</small>` : ''}
-                
-                <button onclick="playMovieInApp('${videoUrl}', ${resumeTime}, '${movie.stream_id}')">
-                    ${resumeTime > 0 ? 'إكمال المشاهدة' : 'تشغيل الفيلم'}
-                </button>
-                <button onclick="toggleFavorite('${movie.stream_id}', ${!isFav})" style="background: ${isFav ? '#f39c12' : '#333'};">
-                    ${isFav ? '★ مفضل' : '☆ أضف للمفضلة'}
-                </button>
+            const cardEl = document.createElement('div');
+            cardEl.className = 'movie-card';
+            
+            let actionHtml = '';
+
+            // بناء زر التشغيل بناءً على نوع القسم
+            if (currentMode === 'live') {
+                // البث المباشر: الرابط يكون بدون امتدادات غالباً
+                const videoUrl = `${currentDomain}/${currentUser}/${currentPass}/${id}`;
+                actionHtml = `<button onclick="playMovieInApp('${videoUrl}', 0, '${id}')">📺 تشغيل القناة</button>`;
+            
+            } else if (currentMode === 'vod') {
+                // الأفلام: تحتاج لامتداد مثل mkv
+                const ext = item.container_extension || "mkv";
+                const videoUrl = `${currentDomain}/movie/${currentUser}/${currentPass}/${id}.${ext}`;
+                actionHtml = `
+                    ${resumeTime > 0 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${progressPercent}%"></div></div><small style="color:#aaa;">تمت المشاهدة جزئياً</small>` : ''}
+                    <button onclick="playMovieInApp('${videoUrl}', ${resumeTime}, '${id}')">${resumeTime > 0 ? 'إكمال المشاهدة' : '▶ تشغيل الفيلم'}</button>
+                `;
+            
+            } else if (currentMode === 'series') {
+                // المسلسلات: تحتاج لجلب تفاصيل الحلقات أولاً، لذا نرسلها لدالة مخصصة
+                actionHtml = `<button onclick="playSeriesFirstEpisode('${id}')" style="background:#f39c12;">▶ تشغيل الحلقة 1</button>`;
+            }
+
+            cardEl.innerHTML = `
+                <img src="${icon}" onerror="this.src='https://via.placeholder.com/200x250?text=بدون+صورة'">
+                <h3 style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</h3>
+                ${actionHtml}
             `;
-            container.appendChild(movieEl);
+            container.appendChild(cardEl);
         });
     }
 
     // ==========================================
-    // 5. الجسر للتواصل مع الآيفون والمزامنة
+    // 8. المعالجة الذكية للمسلسلات (تشغيل الحلقة 1 تلقائياً)
+    // ==========================================
+    async function playSeriesFirstEpisode(seriesId) {
+        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=get_series_info&series_id=${seriesId}`;
+        
+        try {
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+            
+            // استخراج أول موسم وأول حلقة
+            const seasons = Object.keys(data.episodes);
+            if (seasons.length > 0) {
+                const firstEpisode = data.episodes[seasons[0]][0];
+                const ext = firstEpisode.container_extension || 'mkv';
+                const videoUrl = `${currentDomain}/series/${currentUser}/${currentPass}/${firstEpisode.id}.${ext}`;
+                
+                playMovieInApp(videoUrl, 0, firstEpisode.id);
+            } else {
+                alert("عفواً، لا توجد حلقات متاحة لهذا المسلسل حالياً.");
+            }
+        } catch (error) {
+            alert("حدث خطأ أثناء محاولة جلب المسلسل.");
+        }
+    }
+
+    // ==========================================
+    // 9. الجسر للتواصل مع تطبيق الآيفون والمزامنة
     // ==========================================
     function playMovieInApp(videoUrl, resumeTime, movieId) {
         currentMovieId = movieId;
@@ -267,12 +398,13 @@
         if (window.ReactNativeWebView) {
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
         } else {
-            alert("محاكاة التشغيل:\nالرابط: " + videoUrl + "\nالبدء من الثانية: " + resumeTime);
+            alert("محاكاة التشغيل للتطبيق:\n" + videoUrl + "\nوقت البدء: " + resumeTime);
         }
     }
 
     window.updateWatchProgress = async function(currentSeconds) {
-        if (!currentMovieId || !currentUser) return;
+        if (!currentMovieId || !currentUser || currentMode === 'live') return; // لا نحفظ تقدم القنوات المباشرة
+        
         await supabaseClient
             .from('user_activity')
             .upsert({ 
@@ -281,19 +413,6 @@
                 resume_time: currentSeconds 
             }, { onConflict: 'username, movie_id' });
     };
-
-    async function toggleFavorite(movieId, makeFavorite) {
-        await supabaseClient
-            .from('user_activity')
-            .upsert({ 
-                username: currentUser, 
-                movie_id: movieId, 
-                is_favorite: makeFavorite 
-            }, { onConflict: 'username, movie_id' });
-
-        const selectedCategory = document.getElementById('category-selector').value;
-        fetchMovies(selectedCategory); 
-    }
 </script>
 </body>
 </html>
