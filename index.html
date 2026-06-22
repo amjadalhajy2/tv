@@ -6,14 +6,60 @@
     <title>تطبيق IPTV الذكي</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { background-color: #111; color: white; font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-        input { padding: 10px; margin: 5px; width: 80%; max-width: 300px; border-radius: 5px; border: none; }
-        button { background: #e50914; color: white; border: none; padding: 10px 20px; margin-top: 10px; border-radius: 5px; font-weight: bold; cursor: pointer; }
-        .hidden { display: none; }
-        .movie-card { background: #222; margin: 10px; padding: 15px; border-radius: 8px; display: inline-block; width: 200px; }
-        .movie-card img { width: 100%; border-radius: 5px; height: 250px; object-fit: cover; }
-        .progress-bar { height: 5px; background: #555; margin-top: 10px; border-radius: 5px; overflow: hidden; }
-        .progress-fill { height: 100%; background: #e50914; width: 0%; }
+        body { 
+            background-color: #111; 
+            color: white; 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            text-align: center; 
+        }
+        input { 
+            padding: 10px; 
+            margin: 5px; 
+            width: 80%; 
+            max-width: 300px; 
+            border-radius: 5px; 
+            border: none; 
+        }
+        button { 
+            background: #e50914; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            margin-top: 10px; 
+            border-radius: 5px; 
+            font-weight: bold; 
+            cursor: pointer; 
+        }
+        .hidden { 
+            display: none; 
+        }
+        .movie-card { 
+            background: #222; 
+            margin: 10px; 
+            padding: 15px; 
+            border-radius: 8px; 
+            display: inline-block; 
+            width: 200px; 
+        }
+        .movie-card img { 
+            width: 100%; 
+            border-radius: 5px; 
+            height: 250px; 
+            object-fit: cover; 
+        }
+        .progress-bar { 
+            height: 5px; 
+            background: #555; 
+            margin-top: 10px; 
+            border-radius: 5px; 
+            overflow: hidden; 
+        }
+        .progress-fill { 
+            height: 100%; 
+            background: #e50914; 
+            width: 0%; 
+        }
     </style>
 </head>
 <body>
@@ -27,7 +73,7 @@
     </div>
 
     <div id="main-screen" class="hidden">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto;">
             <h2>مكتبة الأفلام</h2>
             <button onclick="logout()" style="background: #555;">تسجيل خروج</button>
         </div>
@@ -36,23 +82,25 @@
 
 <script>
     // ==========================================
-    // 1. إعدادات Supabase (ضع مفاتيحك هنا)
+    // 1. إعدادات Supabase (تأكد من وضع مفاتيحك الحقيقية هنا)
     // ==========================================
-    const SUPABASE_URL = 'https://kpfymvtyqbyjmlqfgujo.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc'; // ضع مفتاحك هنا
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const SUPABASE_URL = 'https://kpfymvtyqbyjmlqfgujo.supabase.co'; // استبدله برابط مشروعك
+    const SUPABASE_ANON_KEY = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc'; // استبدله بمفتاحك
+    
+    // تم استخدام supabaseClient لتجنب التعارض مع اسم المكتبة
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // متغيرات الجلسة
     let currentUser = '';
     let currentDomain = '';
     let currentPass = '';
-    let currentMovieId = null; // الفيلم المشغل حالياً
+    let currentMovieId = null; 
 
     // ==========================================
     // 2. نظام تسجيل الدخول والحفظ المحلي
     // ==========================================
     window.onload = function() {
-        // التحقق مما إذا كانت البيانات محفوظة في الهاتف (localStorage)
+        // التحقق من وجود بيانات مسجلة مسبقاً
         const savedUser = localStorage.getItem('xtream_user');
         const savedPass = localStorage.getItem('xtream_pass');
         const savedDomain = localStorage.getItem('xtream_domain');
@@ -66,23 +114,25 @@
     };
 
     function saveCredentialsAndLogin() {
-        const domain = document.getElementById('xtream-domain').value;
-        const user = document.getElementById('xtream-user').value;
-        const pass = document.getElementById('xtream-pass').value;
+        const domain = document.getElementById('xtream-domain').value.trim();
+        const user = document.getElementById('xtream-user').value.trim();
+        const pass = document.getElementById('xtream-pass').value.trim();
 
         if (!domain || !user || !pass) {
             alert("يرجى تعبئة جميع الحقول!");
             return;
         }
 
-        // حفظ البيانات في ذاكرة المتصفح (ستبقى محفوظة داخل تطبيق الآيفون)
-        localStorage.setItem('xtream_domain', domain);
+        // إزالة الشرطة المائلة من آخر الرابط إن وجدت
+        const cleanDomain = domain.endsWith('/') ? domain.slice(0, -1) : domain;
+
+        localStorage.setItem('xtream_domain', cleanDomain);
         localStorage.setItem('xtream_user', user);
         localStorage.setItem('xtream_pass', pass);
 
         currentUser = user;
         currentPass = pass;
-        currentDomain = domain;
+        currentDomain = cleanDomain;
         showMainScreen();
     }
 
@@ -94,29 +144,36 @@
     function showMainScreen() {
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-screen').classList.remove('hidden');
-        fetchMovies("15"); // جلب تصنيف الأفلام كمثال
+        fetchMovies("15"); // يمكنك تغيير الرقم "15" برقم تصنيف الأفلام الخاص باشتراكك
     }
 
     // ==========================================
     // 3. جلب مكتبة Xtream ودمجها مع بيانات Supabase
     // ==========================================
     async function fetchMovies(categoryId) {
+        document.getElementById('movies-container').innerText = "جاري تحميل المكتبة...";
         const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=get_vod_streams&category_id=${categoryId}`;
         
         try {
-            // جلب الأفلام من سيرفر البث
             const xtreamResponse = await fetch(apiUrl);
+            if (!xtreamResponse.ok) throw new Error("فشل الاتصال بسيرفر IPTV");
             const movies = await xtreamResponse.json();
 
-            // جلب تاريخ المشاهدات للمستخدم الحالي من Supabase
-            const { data: userActivity, error } = await supabase
+            // جلب بيانات المستخدم من سوبابيس
+            const { data: userActivity, error } = await supabaseClient
                 .from('user_activity')
                 .select('*')
                 .eq('username', currentUser);
 
-            displayMovies(movies.slice(0, 20), userActivity || []); // عرض أول 20 فيلم للتبسيط
+            if (error) {
+                console.error("خطأ في جلب بيانات سوبابيس:", error);
+            }
+
+            // عرض أول 20 فيلم للتجربة، يمكنك إزالة .slice لعرض الكل
+            displayMovies(movies.slice(0, 20), userActivity || []); 
         } catch (error) {
-            document.getElementById('movies-container').innerText = "حدث خطأ أثناء الاتصال بالخادم.";
+            document.getElementById('movies-container').innerText = "حدث خطأ أثناء الاتصال بالخادم. تأكد من صحة البيانات أو من سياسة CORS في متصفحك.";
+            console.error("Fetch Error:", error);
         }
     }
 
@@ -124,8 +181,12 @@
         const container = document.getElementById('movies-container');
         container.innerHTML = '';
 
+        if (!movies || movies.length === 0) {
+            container.innerText = "لا توجد أفلام في هذا التصنيف.";
+            return;
+        }
+
         movies.forEach(movie => {
-            // البحث إذا كان المستخدم قد شاهد هذا الفيلم من قبل
             const activity = userActivity.find(act => act.movie_id == movie.stream_id);
             const resumeTime = activity ? activity.resume_time : 0;
             const isFav = activity ? activity.is_favorite : false;
@@ -133,13 +194,13 @@
             const streamExtension = movie.container_extension || "mkv";
             const videoUrl = `${currentDomain}/movie/${currentUser}/${currentPass}/${movie.stream_id}.${streamExtension}`;
 
-            // شريط التقدم (كشكل توضيحي، بافتراض أن مدة الفيلم 7200 ثانية - ساعتين)
+            // افتراض مدة الفيلم 7200 ثانية (ساعتين) لرسم شريط التقدم
             const progressPercent = resumeTime > 0 ? Math.min((resumeTime / 7200) * 100, 100) : 0;
 
             const movieEl = document.createElement('div');
             movieEl.className = 'movie-card';
             movieEl.innerHTML = `
-                <img src="${movie.stream_icon}" onerror="this.src='default_poster.jpg'">
+                <img src="${movie.stream_icon}" onerror="this.src='https://via.placeholder.com/200x250?text=بدون+صورة'">
                 <h3 style="font-size: 14px;">${movie.name}</h3>
                 
                 ${resumeTime > 0 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${progressPercent}%"></div></div><small style="color:#aaa;">تمت المشاهدة جزئياً</small>` : ''}
@@ -160,33 +221,34 @@
     // ==========================================
     function playMovieInApp(videoUrl, resumeTime, movieId) {
         currentMovieId = movieId;
-        
         const message = { type: 'PLAY_MOVIE', url: videoUrl, resumeTime: resumeTime };
 
+        // إرسال الرسالة إلى تطبيق React Native إذا كان مفتوحاً داخله
         if (window.ReactNativeWebView) {
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
         } else {
-            alert("محاكاة: تشغيل الفيلم من الثانية " + resumeTime);
+            // محاكاة للتجربة على متصفح الكمبيوتر
+            alert("محاكاة: سيتم إرسال هذا الرابط لتطبيق الآيفون:\n" + videoUrl + "\n\nللبدء من الثانية: " + resumeTime);
         }
     }
 
-    // هذه الدالة سيستدعيها تطبيق الآيفون برمجياً كل 5 ثوانٍ
+    // هذه الدالة سيستدعيها تطبيق الآيفون برمجياً
     window.updateWatchProgress = async function(currentSeconds) {
         if (!currentMovieId || !currentUser) return;
 
-        // تحديث أو إدخال الوقت في قاعدة بيانات Supabase
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('user_activity')
             .upsert({ 
                 username: currentUser, 
                 movie_id: currentMovieId, 
                 resume_time: currentSeconds 
-            }, { onConflict: 'username, movie_id' }); // تأكد من إعداد Unique Constraint في Supabase
+            }, { onConflict: 'username, movie_id' });
+            
+        if (error) console.error("خطأ أثناء حفظ تقدم المشاهدة:", error);
     };
 
-    // دالة لحفظ/إزالة الفيلم من المفضلة
     async function toggleFavorite(movieId, makeFavorite) {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('user_activity')
             .upsert({ 
                 username: currentUser, 
@@ -195,7 +257,9 @@
             }, { onConflict: 'username, movie_id' });
 
         if (!error) {
-            fetchMovies("15"); // إعادة تحميل القائمة لتحديث شكل الأزرار
+            fetchMovies("15"); // إعادة التحديث لإظهار التغيير
+        } else {
+            console.error("خطأ أثناء تحديث المفضلة:", error);
         }
     }
 </script>
