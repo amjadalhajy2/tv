@@ -21,6 +21,9 @@
             border-radius: 5px; 
             border: none; 
             font-family: Arial, sans-serif;
+            background: #222;
+            color: white;
+            border: 1px solid #444;
         }
         button { 
             background: #e50914; 
@@ -36,7 +39,6 @@
         button:hover { background: #b20710; }
         .hidden { display: none; }
         
-        /* تنسيق كروت العرض */
         .movie-card { 
             background: #222; 
             margin: 10px; 
@@ -65,7 +67,6 @@
             width: 0%; 
         }
         
-        /* تنسيقات الأقسام العلوية والبحث */
         .header-bar {
             display: flex; 
             justify-content: space-between; 
@@ -94,11 +95,11 @@
         .search-box {
             width: 100%;
             max-width: 400px;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #444;
-            background: #222;
-            color: white;
+        }
+        .loading-text {
+            color: #f39c12;
+            font-size: 18px;
+            margin-top: 40px;
         }
     </style>
 </head>
@@ -131,13 +132,12 @@
             <input type="text" id="search-input" class="search-box" placeholder="ابحث عن فيلم، مسلسل، أو قناة..." onkeyup="filterResults()">
         </div>
 
-        <div id="movies-container">جاري تحميل المكتبة...</div>
+        <div id="movies-container">
+            <div class="loading-text">جاري تحميل المكتبة...</div>
+        </div>
     </div>
 
 <script>
-    // ==========================================
-    // 1. إعدادات Supabase ومربعات المتغيرات
-    // ==========================================
     const SUPABASE_URL = 'https://kpfymvtyqbyjmlqfgujo.supabase.co'; 
     const SUPABASE_ANON_KEY = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc'; 
     
@@ -148,13 +148,9 @@
     let currentPass = '';
     let currentMovieId = null; 
 
-    // متغيرات النظام الجديد
-    let currentMode = 'vod'; // يمكن أن تكون: vod, series, live
-    let allCurrentData = []; // لحفظ البيانات للبحث السريع محلياً
+    let currentMode = 'vod'; 
+    let allCurrentData = []; 
 
-    // ==========================================
-    // 2. نظام الدخول والحفظ
-    // ==========================================
     window.onload = function() {
         const savedUser = localStorage.getItem('xtream_user');
         const savedPass = localStorage.getItem('xtream_pass');
@@ -198,30 +194,22 @@
     function showMainScreen() {
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-screen').classList.remove('hidden');
-        switchMode('vod'); // البدء دائماً بقسم الأفلام
+        switchMode('vod'); 
     }
 
-    // ==========================================
-    // 3. التنقل بين الأقسام (أفلام، مسلسلات، مباشر)
-    // ==========================================
     function switchMode(mode) {
         currentMode = mode;
         
-        // تغيير شكل الأزرار النشطة
         document.getElementById('btn-vod').classList.remove('active');
         document.getElementById('btn-series').classList.remove('active');
         document.getElementById('btn-live').classList.remove('active');
         document.getElementById(`btn-${mode}`).classList.add('active');
 
-        // تفريغ صندوق البحث
         document.getElementById('search-input').value = '';
 
         fetchCategories();
     }
 
-    // ==========================================
-    // 4. جلب التصنيفات ديناميكياً حسب القسم المختار
-    // ==========================================
     async function fetchCategories() {
         let action = '';
         if (currentMode === 'vod') action = 'get_vod_categories';
@@ -244,6 +232,12 @@
                 return;
             }
 
+            // إضافة قسم "الكل" في بداية القائمة
+            const optionAll = document.createElement('option');
+            optionAll.value = 'all';
+            optionAll.text = '🌐 الكل (بحث شامل)';
+            selector.appendChild(optionAll);
+
             categories.forEach(cat => {
                 const option = document.createElement('option');
                 option.value = cat.category_id;
@@ -251,81 +245,81 @@
                 selector.appendChild(option);
             });
 
-            // جلب محتوى أول باقة في القائمة تلقائياً
-            fetchContent(categories[0].category_id);
+            // تحميل قسم "الكل" ليكون متاحاً للبحث الفوري مباشرة
+            fetchContent('all');
 
         } catch (error) {
             document.getElementById('category-selector').innerHTML = '<option value="">حدث خطأ في تحميل التصنيفات</option>';
         }
     }
 
-    // ==========================================
-    // 5. جلب المحتوى (قنوات، أفلام، مسلسلات)
-    // ==========================================
     async function fetchContent(categoryId) {
         if (!categoryId) return;
-        document.getElementById('movies-container').innerText = "جاري تحميل المحتوى...";
+        
+        document.getElementById('movies-container').innerHTML = `
+            <div class="loading-text">
+                ⏳ جاري التحميل... <br><br> 
+                <small style="color: #888;">(سحب المكتبة بالكامل قد يستغرق بضع ثوانٍ)</small>
+            </div>`;
         
         let action = '';
         if (currentMode === 'vod') action = 'get_vod_streams';
         else if (currentMode === 'series') action = 'get_series';
         else if (currentMode === 'live') action = 'get_live_streams';
 
-        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=${action}&category_id=${categoryId}`;
+        // إذا تم اختيار "الكل"، نقوم بإزالة parameter الـ category_id لجلب المكتبة كاملة
+        let apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=${action}`;
+        if (categoryId !== 'all') {
+            apiUrl += `&category_id=${categoryId}`;
+        }
         
         try {
             const xtreamResponse = await fetch(apiUrl);
-            allCurrentData = await xtreamResponse.json(); // حفظ البيانات في المصفوفة للبحث السريع
+            allCurrentData = await xtreamResponse.json(); 
 
-            const { data: userActivity } = await supabaseClient
-                .from('user_activity')
-                .select('*')
-                .eq('username', currentUser);
+            // محاولة جلب بيانات سوبابيس (نتجاهل الخطأ إن لم تكن مربوطة)
+            let userActivity = [];
+            try {
+                const { data } = await supabaseClient
+                    .from('user_activity')
+                    .select('*')
+                    .eq('username', currentUser);
+                if (data) userActivity = data;
+            } catch(e) {}
 
-            // عرض النتائج (أول 100 عنصر للسرعة)
-            renderDisplay(allCurrentData.slice(0, 100), userActivity || []); 
+            renderDisplay(allCurrentData.slice(0, 100), userActivity); 
         } catch (error) {
-            document.getElementById('movies-container').innerText = "حدث خطأ أثناء الاتصال بالخادم.";
+            document.getElementById('movies-container').innerHTML = '<div class="loading-text" style="color: red;">حدث خطأ أثناء جلب البيانات.</div>';
         }
     }
 
-    // ==========================================
-    // 6. نظام البحث الفوري
-    // ==========================================
     function filterResults() {
         const query = document.getElementById('search-input').value.toLowerCase();
         
-        // فلترة المصفوفة المحفوظة مسبقاً بناءً على الاسم المعروض
         const filteredData = allCurrentData.filter(item => {
             const title = item.name ? item.name.toLowerCase() : "";
             return title.includes(query);
         });
 
-        // جلب بيانات سوبابيس (محاكاة سريعة بدون إعادة طلب لسرعة البحث)
         renderDisplay(filteredData.slice(0, 100), []); 
     }
 
-    // ==========================================
-    // 7. محرك الرسم الديناميكي للواجهة
-    // ==========================================
     function renderDisplay(items, userActivity) {
         const container = document.getElementById('movies-container');
         container.innerHTML = '';
 
         if (!items || items.length === 0) {
-            container.innerText = "لا يوجد محتوى في هذا التصنيف أو مطابق لبحثك.";
+            container.innerHTML = '<div class="loading-text">لا يوجد محتوى في هذا التصنيف أو مطابق لبحثك.</div>';
             return;
         }
 
         items.forEach(item => {
-            // توحيد المتغيرات لأن أسماء البيانات تختلف بين الأفلام والمسلسلات والقنوات
             const id = item.stream_id || item.series_id;
             const name = item.name;
             const icon = item.stream_icon || item.cover || 'https://via.placeholder.com/200x250?text=بدون+صورة';
             
             const activity = userActivity.find(act => act.movie_id == id);
             const resumeTime = activity ? activity.resume_time : 0;
-            const isFav = activity ? activity.is_favorite : false;
             const progressPercent = resumeTime > 0 ? Math.min((resumeTime / 7200) * 100, 100) : 0;
 
             const cardEl = document.createElement('div');
@@ -333,38 +327,29 @@
             
             let actionHtml = '';
 
-            // بناء زر التشغيل بناءً على نوع القسم
             if (currentMode === 'live') {
-                // البث المباشر: الرابط يكون بدون امتدادات غالباً
                 const videoUrl = `${currentDomain}/${currentUser}/${currentPass}/${id}`;
                 actionHtml = `<button onclick="playMovieInApp('${videoUrl}', 0, '${id}')">📺 تشغيل القناة</button>`;
-            
             } else if (currentMode === 'vod') {
-                // الأفلام: تحتاج لامتداد مثل mkv
                 const ext = item.container_extension || "mkv";
                 const videoUrl = `${currentDomain}/movie/${currentUser}/${currentPass}/${id}.${ext}`;
                 actionHtml = `
                     ${resumeTime > 0 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${progressPercent}%"></div></div><small style="color:#aaa;">تمت المشاهدة جزئياً</small>` : ''}
                     <button onclick="playMovieInApp('${videoUrl}', ${resumeTime}, '${id}')">${resumeTime > 0 ? 'إكمال المشاهدة' : '▶ تشغيل الفيلم'}</button>
                 `;
-            
             } else if (currentMode === 'series') {
-                // المسلسلات: تحتاج لجلب تفاصيل الحلقات أولاً، لذا نرسلها لدالة مخصصة
                 actionHtml = `<button onclick="playSeriesFirstEpisode('${id}')" style="background:#f39c12;">▶ تشغيل الحلقة 1</button>`;
             }
 
             cardEl.innerHTML = `
                 <img src="${icon}" onerror="this.src='https://via.placeholder.com/200x250?text=بدون+صورة'">
-                <h3 style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</h3>
+                <h3 style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${name}">${name}</h3>
                 ${actionHtml}
             `;
             container.appendChild(cardEl);
         });
     }
 
-    // ==========================================
-    // 8. المعالجة الذكية للمسلسلات (تشغيل الحلقة 1 تلقائياً)
-    // ==========================================
     async function playSeriesFirstEpisode(seriesId) {
         const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=get_series_info&series_id=${seriesId}`;
         
@@ -372,7 +357,6 @@
             const response = await fetch(apiUrl);
             const data = await response.json();
             
-            // استخراج أول موسم وأول حلقة
             const seasons = Object.keys(data.episodes);
             if (seasons.length > 0) {
                 const firstEpisode = data.episodes[seasons[0]][0];
@@ -388,9 +372,6 @@
         }
     }
 
-    // ==========================================
-    // 9. الجسر للتواصل مع تطبيق الآيفون والمزامنة
-    // ==========================================
     function playMovieInApp(videoUrl, resumeTime, movieId) {
         currentMovieId = movieId;
         const message = { type: 'PLAY_MOVIE', url: videoUrl, resumeTime: resumeTime };
@@ -403,7 +384,7 @@
     }
 
     window.updateWatchProgress = async function(currentSeconds) {
-        if (!currentMovieId || !currentUser || currentMode === 'live') return; // لا نحفظ تقدم القنوات المباشرة
+        if (!currentMovieId || !currentUser || currentMode === 'live') return; 
         
         await supabaseClient
             .from('user_activity')
