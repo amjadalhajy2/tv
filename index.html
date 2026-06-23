@@ -682,7 +682,7 @@ async function fetchIPTV(url) {
 
         // توجيه مسار الفيديو لخادم التحويل الذي أنشأته سابقاً (DuckDNS) 🔴 تأكد من تعديل الرابط 🔴
         if (type !== 'live') {
-            const proxyBaseUrl = 'https://رابط_السيرفر_الخاص_بك_هنا.duckdns.org/stream?url='; 
+            const proxyBaseUrl = 'https://amjad-iptv.duckdns.org/stream?url='; 
             finalUrl = proxyBaseUrl + encodeURIComponent(originalUrl);
         }
 
