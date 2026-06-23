@@ -288,22 +288,20 @@
     const ITEMS_PER_PAGE = 30;
 
     // 🌟 الدالة السحرية الجديدة لتجاوز حظر المتصفحات (CORS / Mixed Content) 🌟
-    async function fetchIPTV(url) {
-        // إضافة طابع زمني لمنع تخزين البيانات القديمة (Cache)
-        const timestampUrl = url + (url.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
-        
-        try {
-            // المحاولة الأولى: الاتصال المباشر
-            const res = await fetch(timestampUrl);
-            if (!res.ok) throw new Error('Network Error');
-            return await res.json();
-        } catch (e) {
-            // المحاولة الثانية: إذا تم الحظر، نستخدم بروكسي عبور مجاني وآمن للبيانات النصية (JSON)
-            const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(timestampUrl);
-            const proxyRes = await fetch(proxyUrl);
-            return await proxyRes.json();
-        }
+async function fetchIPTV(url) {
+    // توجيه طلبات تسجيل الدخول والبيانات عبر سيرفرك الآمن
+    // 🔴🔴 تنبيه: استبدل "رابط_السيرفر_الخاص_بك_هنا" برابط DuckDNS الخاص بك 🔴🔴
+    const proxyBaseUrl = 'https://amjad-iptv.duckdns.org/api?url=';
+    const finalUrl = proxyBaseUrl + encodeURIComponent(url);
+    
+    try {
+        const res = await fetch(finalUrl);
+        if (!res.ok) throw new Error('Network Error');
+        return await res.json();
+    } catch (e) {
+        throw new Error('فشل الاتصال عبر السيرفر الوسيط');
     }
+}
 
     function showToast(msg) {
         const t = document.getElementById('toast');
