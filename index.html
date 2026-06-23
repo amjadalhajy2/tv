@@ -2,398 +2,727 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق IPTV الذكي - المنصة الشاملة</title>
+    <!-- إعدادات الآيفون والهواتف المحمولة -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Stream TV">
+    
+    <title>Stream IPTV - iOS Version</title>
+    <!-- استدعاء مكتبة Supabase كما في الكود الأصلي -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
+        :root { --bg: #0a0a0a; --primary: #e50914; --text: #ffffff; }
+        
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
         body { 
-            background-color: #111; 
-            color: white; 
-            font-family: Arial, sans-serif; 
-            padding: 20px; 
-            text-align: center; 
-        }
-        input, select { 
-            padding: 10px; 
-            margin: 5px; 
-            width: 80%; 
-            max-width: 300px; 
-            border-radius: 5px; 
-            border: none; 
-            font-family: Arial, sans-serif;
-            background: #222;
-            color: white;
-            border: 1px solid #444;
-        }
-        button { 
-            background: #e50914; 
-            color: white; 
-            border: none; 
-            padding: 10px 20px; 
-            margin-top: 10px; 
-            border-radius: 5px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: 0.3s;
-        }
-        button:hover { background: #b20710; }
-        .hidden { display: none; }
-        
-        .movie-card { 
-            background: #222; 
-            margin: 10px; 
-            padding: 15px; 
-            border-radius: 8px; 
-            display: inline-block; 
-            width: 200px; 
-            vertical-align: top;
-        }
-        .movie-card img { 
-            width: 100%; 
-            border-radius: 5px; 
-            height: 250px; 
-            object-fit: cover; 
-        }
-        .progress-bar { 
-            height: 5px; 
-            background: #555; 
-            margin-top: 10px; 
-            border-radius: 5px; 
-            overflow: hidden; 
-        }
-        .progress-fill { 
-            height: 100%; 
-            background: #e50914; 
-            width: 0%; 
+            background-color: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            margin: 0; padding: 0; overflow-x: hidden; user-select: none; width: 100vw; height: 100vh;
         }
         
-        .header-bar {
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            max-width: 900px; 
-            margin: 0 auto 20px auto;
+        ::-webkit-scrollbar { display: none; }
+        .hidden { display: none !important; }
+
+        .scrollable-screen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth; z-index: 50; background: var(--bg);
+            padding-bottom: env(safe-area-inset-bottom);
         }
-        .tabs-container {
-            margin-bottom: 20px;
+
+        /* الإشعارات (Toast) تناسب الهاتف */
+        #toast {
+            visibility: hidden; width: 90vw; background-color: rgba(229, 9, 20, 0.95); color: #fff;
+            text-align: center; border-radius: 12px; padding: 15px; position: fixed;
+            z-index: 10000; left: 5vw; top: 5vh; font-size: 16px; font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); transition: opacity 0.4s, transform 0.4s; 
+            opacity: 0; transform: translateY(-20px); backdrop-filter: blur(10px);
         }
-        .tab-btn {
-            background: #333;
-            margin: 0 5px;
-            font-size: 16px;
+        #toast.show { visibility: visible; opacity: 1; transform: translateY(0); }
+
+        /* الشريط العلوي (بحث وشعار فقط) */
+        header {
+            position: sticky; top: 0; width: 100%; height: 60px; padding: 0 15px;
+            background: rgba(10,10,10,0.85); backdrop-filter: blur(15px);
+            display: flex; align-items: center; justify-content: space-between; z-index: 100;
+            padding-top: env(safe-area-inset-top);
         }
-        .tab-btn.active {
-            background: #e50914;
+        .logo { font-size: 24px; font-weight: 900; color: var(--primary); letter-spacing: 1px; }
+        .search-box input {
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); color: white; 
+            padding: 8px 15px; border-radius: 20px; font-size: 14px; outline: none; width: 150px; transition: 0.3s;
         }
-        .filters-bar {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
+        .search-box input:focus { background: rgba(0,0,0,0.9); width: 200px; border-color: var(--primary); }
+
+        /* الشريط السفلي (بديل شريط التنقل العلوي في التلفاز) */
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(15,15,15,0.95);
+            backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,0.1); display: flex;
+            justify-content: space-around; align-items: center; z-index: 100;
+            padding-bottom: env(safe-area-inset-bottom); height: calc(60px + env(safe-area-inset-bottom));
         }
-        .search-box {
-            width: 100%;
-            max-width: 400px;
+        .nav-item {
+            background: transparent; border: none; color: #888; font-size: 12px; font-weight: 600; 
+            display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; width: 100%;
         }
-        .loading-text {
-            color: #f39c12;
-            font-size: 18px;
-            margin-top: 40px;
+        .nav-item.active { color: var(--primary); }
+        .nav-icon { font-size: 20px; }
+
+        /* منطقة المحتوى العام */
+        #main-content { padding-top: 10px; padding-bottom: 90px; }
+        
+        .row-container { margin-bottom: 20px; }
+        .row-title { font-size: 18px; font-weight: bold; margin: 0 15px 10px 0; text-shadow: 1px 1px 3px black; }
+        
+        /* التمرير الأفقي للأقسام (بدون أزرار) */
+        .row-inner, .categories-row { 
+            display: flex; gap: 12px; overflow-x: auto; padding: 5px 15px; 
+            scroll-snap-type: x mandatory; scroll-behavior: smooth;
+        }
+        
+        .category-chip { 
+            background: rgba(255,255,255,0.1); color: white; padding: 8px 20px; border-radius: 20px; 
+            font-size: 14px; font-weight: bold; border: 1px solid transparent; white-space: nowrap; flex-shrink: 0;
+        }
+        .category-chip.active { background: var(--primary); border-color: white; }
+
+        /* شبكة البطاقات (3 أعمدة في الموبايل) */
+        .grid-container { 
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px 15px; margin-bottom: 30px; 
+        }
+
+        /* تصميم البطاقات */
+        .card {
+            border-radius: 8px; position: relative; background: #1a1a1a; padding: 0; border: none;
+            width: 100%; aspect-ratio: 2 / 3; overflow: hidden; flex-shrink: 0; scroll-snap-align: start;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+        }
+        .row-inner .card { width: 30vw; }
+        
+        .fallback-text {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; 
+            justify-content: center; text-align: center; padding: 5px; font-size: 12px; color: white; 
+            background: linear-gradient(45deg, #111, #333); z-index: 1; font-weight: bold;
+        }
+        .card img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; transition: opacity 0.3s; }
+        
+        .progress-bar { position: absolute; bottom: 0; left:0; width: 100%; height: 4px; background: rgba(0,0,0,0.6); z-index: 5; }
+        .progress-fill { height: 100%; background: var(--primary); }
+
+        /* بطاقات القنوات */
+        .live-card { width: 100%; background: transparent; border: none; text-align: center; flex-shrink: 0; }
+        .row-inner .live-card { width: 28vw; }
+        .live-img-wrapper {
+            width: 100%; aspect-ratio: 1 / 1; background: #000; border-radius: 8px; position: relative; 
+            overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+        }
+        .live-img-wrapper img { width: 80%; height: 80%; object-fit: contain; z-index: 2; }
+        .live-title { font-size: 12px; margin-top: 8px; font-weight: bold; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .load-more-btn { 
+            background: rgba(40,40,40,0.9); color: white; padding: 12px 20px; font-size: 14px; 
+            border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); width: 90%; margin: 0 auto; display: block; font-weight: bold;
+        }
+
+        /* شاشة التفاصيل (متوافقة مع الموبايل) */
+        #details-screen { padding: 0; background-size: cover; background-position: center; }
+        .details-overlay { background: linear-gradient(to bottom, rgba(10,10,10,0.6) 0%, #0a0a0a 60%); min-height: 100vh; padding-bottom: 30px;}
+        
+        .details-poster-col { width: 100%; height: 45vh; position: relative; }
+        .details-poster { width: 100%; height: 100%; object-fit: cover; mask-image: linear-gradient(to bottom, black 50%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%); }
+        
+        .details-info-col { padding: 0 20px; margin-top: -60px; position: relative; z-index: 10; }
+        .details-title { font-size: 28px; font-weight: bold; margin: 0 0 15px 0; text-shadow: 2px 2px 4px black; }
+        
+        .action-bar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        .action-btn { 
+            background: white; color: black; border: none; padding: 12px; font-size: 16px; 
+            font-weight: bold; border-radius: 8px; display: flex; justify-content: center; align-items: center; gap: 8px; 
+        }
+        .action-btn.fav { background: rgba(50,50,50,0.8); color: white; border: 1px solid white; backdrop-filter: blur(5px); }
+        .action-btn.play { background: var(--primary); color: white; border: none; }
+        
+        .seasons-select { background: rgba(30,30,30,0.85); color: white; padding: 12px; font-size: 16px; border: 1px solid white; border-radius: 8px; outline: none; width: 100%; }
+        
+        .details-meta { font-size: 12px; color: #ccc; font-weight: 600; display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .details-desc { font-size: 14px; line-height: 1.6; opacity: 0.85; margin: 0 0 20px 0; }
+        
+        .details-episodes-col { padding: 0 20px; }
+        .ep-card { 
+            background: rgba(35,35,35,0.85); padding: 15px; border-radius: 8px; margin-bottom: 10px; 
+            display: flex; justify-content: space-between; align-items: center; color: white; font-size: 14px; position: relative; overflow: hidden;
+        }
+        .ep-progress { position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: rgba(0,0,0,0.4); }
+        .ep-progress-fill { height: 100%; background: var(--primary); }
+        
+        .back-btn-float {
+            position: fixed; top: max(15px, env(safe-area-inset-top)); right: 15px; background: rgba(0,0,0,0.6);
+            color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; 
+            justify-content: center; align-items: center; font-size: 20px; z-index: 100; backdrop-filter: blur(5px);
+        }
+
+        /* شاشة تسجيل الدخول */
+        #login-screen { display: flex; align-items: center; justify-content: center; padding: 20px; background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%); z-index: 500; }
+        .login-wrapper { background: rgba(0, 0, 0, 0.7); padding: 30px 20px; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; border: 1px solid rgba(255,255,255,0.05); }
+        .login-logo { color: var(--primary); font-size: 32px; font-weight: 900; letter-spacing: 2px; margin: 0 0 10px 0; }
+        .login-form { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
+        .login-form input { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: white; padding: 14px; border-radius: 8px; font-size: 16px; }
+        .login-btn { background: var(--primary); color: white; border: none; padding: 14px; font-size: 18px; border-radius: 8px; font-weight: bold; margin-top: 10px; }
+
+        /* شاشة الحسابات */
+        #profiles-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; z-index: 500; }
+        .profiles-container { display: flex; gap: 15px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
+        .profile-card { width: 100px; height: 100px; background: #222; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; color: white; border: 2px solid transparent; }
+        .profile-card:active { border-color: var(--primary); transform: scale(0.95); }
+
+        #player-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9999; }
+        video { width: 100%; height: 100%; outline: none; background: #000; }
+        
+        .close-player-btn {
+            position: absolute; top: max(20px, env(safe-area-inset-top)); right: 20px; background: rgba(200,0,0,0.8);
+            color: white; border: none; padding: 10px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 10000;
         }
     </style>
 </head>
 <body>
 
-    <div id="login-screen">
-        <h2>تسجيل الدخول للاشتراك</h2>
-        <input type="text" id="xtream-domain" placeholder="رابط السيرفر (مثال: http://domain.com:8080)"><br>
-        <input type="text" id="xtream-user" placeholder="اسم المستخدم"><br>
-        <input type="password" id="xtream-pass" placeholder="كلمة المرور"><br>
-        <button onclick="saveCredentialsAndLogin()">دخول وحفظ البيانات</button>
+    <div id="toast">إشعار</div>
+
+    <!-- شاشة تسجيل الدخول -->
+    <div id="login-screen" class="scrollable-screen">
+        <div class="login-wrapper">
+            <h1 class="login-logo">STREAM</h1>
+            <h2 style="margin:0; color:white; font-size:24px;">تسجيل الدخول</h2>
+            <div class="login-form">
+                <input type="text" id="iptv-domain" placeholder="رابط السيرفر (http://...)">
+                <input type="text" id="iptv-user" placeholder="اسم المستخدم">
+                <input type="password" id="iptv-pass" placeholder="كلمة المرور">
+                <button id="login-btn" class="login-btn" onclick="login()">دخول</button>
+            </div>
+        </div>
     </div>
 
-    <div id="main-screen" class="hidden">
-        <div class="header-bar">
-            <h2>مكتبة البث</h2>
-            <button onclick="logout()" style="background: #555;">تسجيل خروج</button>
-        </div>
-        
-        <div class="tabs-container">
-            <button id="btn-vod" class="tab-btn active" onclick="switchMode('vod')">🎬 أفلام</button>
-            <button id="btn-series" class="tab-btn" onclick="switchMode('series')">📺 مسلسلات</button>
-            <button id="btn-live" class="tab-btn" onclick="switchMode('live')">📡 قنوات مباشرة</button>
+    <!-- شاشة اختيار المستخدم -->
+    <div id="profiles-screen" class="scrollable-screen hidden">
+        <h1 style="font-size: 28px; text-align:center;">من يشاهد الآن؟</h1>
+        <div class="profiles-container" id="profiles-list"></div>
+        <button class="action-btn fav" style="margin-top:40px; padding: 10px 30px;" onclick="logout()">تسجيل الخروج</button>
+    </div>
+
+    <!-- الشاشة الرئيسية -->
+    <div id="main-screen" class="scrollable-screen hidden">
+        <header>
+            <div class="logo">STREAM</div>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="🔍 بحث عالمي..." onkeyup="handleSearch()">
+            </div>
+        </header>
+
+        <div id="main-content">
+            <div id="continue-watching-container"></div>
+            <div id="categories-container"></div>
+            <div id="grid-container" class="grid-container"></div>
+            <div id="load-more-container"></div>
         </div>
 
-        <div class="filters-bar">
-            <select id="category-selector" onchange="fetchContent(this.value)">
-                <option value="">جاري التحميل...</option>
-            </select>
-            <input type="text" id="search-input" class="search-box" placeholder="ابحث عن فيلم، مسلسل، أو قناة..." onkeyup="filterResults()">
+        <!-- الشريط السفلي (Navigation Bar) -->
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="loadPage('movies', this)">
+                <span class="nav-icon">🎬</span><span>الأفلام</span>
+            </div>
+            <div class="nav-item" onclick="loadPage('series', this)">
+                <span class="nav-icon">📺</span><span>المسلسلات</span>
+            </div>
+            <div class="nav-item" onclick="loadPage('live', this)">
+                <span class="nav-icon">📡</span><span>القنوات</span>
+            </div>
+            <div class="nav-item" onclick="loadPage('favorites', this)">
+                <span class="nav-icon">❤</span><span>مفضلاتي</span>
+            </div>
         </div>
+    </div>
 
-        <div id="movies-container">
-            <div class="loading-text">جاري تحميل المكتبة...</div>
+    <!-- شاشة التفاصيل -->
+    <div id="details-screen" class="scrollable-screen hidden">
+        <div class="details-overlay">
+            <div class="back-btn-float" onclick="history.back()">✖</div>
+            <div class="details-poster-col">
+                <img id="detail-poster" class="details-poster" src="">
+                <div id="detail-progress-container" class="progress-bar hidden"><div id="detail-progress-fill" class="progress-fill"></div></div>
+            </div>
+            <div class="details-info-col">
+                <h1 id="detail-title" class="details-title"></h1>
+                <div class="details-meta" id="detail-meta"></div>
+                <p class="details-desc" id="detail-desc"></p>
+                <div class="action-bar" id="detail-actions"></div>
+            </div>
+            <div class="details-episodes-col hidden" id="series-episodes-col">
+                <div id="episodes-container"></div>
+            </div>
         </div>
+    </div>
+
+    <!-- مشغل الفيديو (مزود بـ playsinline ليعمل بالآيفون) -->
+    <div id="player-container" class="hidden">
+        <button class="close-player-btn" onclick="closePlayer()">إغلاق ✖</button>
+        <video id="tv-video" controls playsinline webkit-playsinline></video>
     </div>
 
 <script>
-    const SUPABASE_URL = 'https://kpfymvtyqbyjmlqfgujo.supabase.co'; 
-    const SUPABASE_ANON_KEY = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc'; 
-    
-    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // تم الإبقاء على مفاتيح Supabase كما وردت في الكود الأصلي
+    const supabaseUrl = 'https://kpfymvtyqbyjmlqfgujo.supabase.co';
+    const supabaseKey = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc';
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    let currentUser = '';
-    let currentDomain = '';
-    let currentPass = '';
-    let currentMovieId = null; 
+    let iptv = { domain: '', user: '', pass: '' };
+    let currentProfile = '';
+    let currentTab = 'movies'; 
+    let isPlaying = false;
+    let activeStreamData = null; 
+    let searchTimeout = null;
 
-    let currentMode = 'vod'; 
-    let allCurrentData = []; 
+    let flatEpisodes = [];
+    let currentCategoryItems = [];
+    let displayedItemsCount = 0;
+    const ITEMS_PER_PAGE = 30; // تقليل العدد للموبايل لتخفيف الحمل
 
-    window.onload = function() {
-        const savedUser = localStorage.getItem('xtream_user');
-        const savedPass = localStorage.getItem('xtream_pass');
-        const savedDomain = localStorage.getItem('xtream_domain');
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.innerText = msg; t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
 
-        if (savedUser && savedPass && savedDomain) {
-            currentUser = savedUser;
-            currentPass = savedPass;
-            currentDomain = savedDomain;
-            showMainScreen();
+    window.onload = () => {
+        if(localStorage.getItem('iptv_user')) {
+            iptv = { domain: localStorage.getItem('iptv_domain'), user: localStorage.getItem('iptv_user'), pass: localStorage.getItem('iptv_pass') };
+            fetchProfilesFromSupabase();
         }
     };
 
-    function saveCredentialsAndLogin() {
-        const domain = document.getElementById('xtream-domain').value.trim();
-        const user = document.getElementById('xtream-user').value.trim();
-        const pass = document.getElementById('xtream-pass').value.trim();
+    // الدخول والتحقق (نفس المنطق القديم)
+    async function login() {
+        const d = document.getElementById('iptv-domain').value.trim();
+        const u = document.getElementById('iptv-user').value.trim();
+        const p = document.getElementById('iptv-pass').value.trim();
+        const btn = document.getElementById('login-btn');
 
-        if (!domain || !user || !pass) {
-            alert("يرجى تعبئة جميع الحقول!");
-            return;
+        if(!d || !u || !p) { showToast('الرجاء إدخال جميع البيانات'); return; }
+        let cleanDomain = d.endsWith('/') ? d.slice(0, -1) : d;
+        btn.innerText = 'جاري التحقق...'; btn.disabled = true;
+
+        try {
+            const res = await fetch(`${cleanDomain}/player_api.php?username=${u}&password=${p}`);
+            const data = await res.json();
+            if (data && data.user_info && data.user_info.auth === 1) {
+                iptv.domain = cleanDomain; iptv.user = u; iptv.pass = p;
+                localStorage.setItem('iptv_domain', cleanDomain); localStorage.setItem('iptv_user', u); localStorage.setItem('iptv_pass', p);
+                showToast('تم الاتصال بنجاح');
+                btn.innerText = 'دخول'; btn.disabled = false;
+                fetchProfilesFromSupabase();
+            } else { throw new Error('بيانات الدخول غير صحيحة'); }
+        } catch (e) {
+            showToast('فشل الاتصال');
+            btn.innerText = 'دخول'; btn.disabled = false;
         }
-
-        const cleanDomain = domain.endsWith('/') ? domain.slice(0, -1) : domain;
-
-        localStorage.setItem('xtream_domain', cleanDomain);
-        localStorage.setItem('xtream_user', user);
-        localStorage.setItem('xtream_pass', pass);
-
-        currentUser = user;
-        currentPass = pass;
-        currentDomain = cleanDomain;
-        showMainScreen();
     }
 
     function logout() {
-        localStorage.clear();
-        location.reload();
+        localStorage.clear(); location.reload();
     }
 
-    function showMainScreen() {
+    // جلب الحسابات من Supabase
+    async function fetchProfilesFromSupabase() {
         document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('main-screen').classList.remove('hidden');
-        switchMode('vod'); 
-    }
-
-    function switchMode(mode) {
-        currentMode = mode;
+        document.getElementById('profiles-screen').classList.remove('hidden');
         
-        document.getElementById('btn-vod').classList.remove('active');
-        document.getElementById('btn-series').classList.remove('active');
-        document.getElementById('btn-live').classList.remove('active');
-        document.getElementById(`btn-${mode}`).classList.add('active');
-
-        document.getElementById('search-input').value = '';
-
-        fetchCategories();
-    }
-
-    async function fetchCategories() {
-        let action = '';
-        if (currentMode === 'vod') action = 'get_vod_categories';
-        else if (currentMode === 'series') action = 'get_series_categories';
-        else if (currentMode === 'live') action = 'get_live_categories';
-
-        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=${action}`;
-        
+        const container = document.getElementById('profiles-list');
+        container.innerHTML = '<h2 style="color:white; width: 100%; text-align:center;">جاري الجلب...</h2>';
         try {
-            const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error("فشل الاتصال");
+            const { data, error } = await supabaseClient.from('profiles').select('profile_name').eq('username', iptv.user);
+            if(error) throw error; container.innerHTML = '';
             
-            const categories = await response.json();
-            const selector = document.getElementById('category-selector');
-            selector.innerHTML = ''; 
-
-            if (categories.length === 0) {
-                selector.innerHTML = '<option value="">لا توجد باقات متاحة</option>';
-                document.getElementById('movies-container').innerHTML = '';
-                return;
+            if(data && data.length > 0) {
+                data.forEach(p => renderProfileCard(p.profile_name));
+            } else {
+                await supabaseClient.from('profiles').insert([{ username: iptv.user, profile_name: 'العائلة' }]);
+                renderProfileCard('العائلة');
             }
+        } catch (e) { container.innerHTML = '<h2 style="color:var(--primary);">خطأ في قاعدة البيانات</h2>'; }
+    }
 
-            // إضافة قسم "الكل" في بداية القائمة
-            const optionAll = document.createElement('option');
-            optionAll.value = 'all';
-            optionAll.text = '🌐 الكل (بحث شامل)';
-            selector.appendChild(optionAll);
+    function renderProfileCard(name) {
+        const card = document.createElement('div');
+        card.className = 'profile-card'; card.innerText = name; card.onclick = () => selectProfile(name);
+        document.getElementById('profiles-list').appendChild(card);
+    }
 
-            categories.forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat.category_id;
-                option.text = cat.category_name;
-                selector.appendChild(option);
+    function selectProfile(name) {
+        currentProfile = name;
+        document.getElementById('profiles-screen').classList.add('hidden');
+        document.getElementById('main-screen').classList.remove('hidden');
+        loadPage('movies', document.querySelector('.nav-item'));
+    }
+
+    // البحث والتنقل
+    function handleSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            const query = document.getElementById('search-input').value.toLowerCase().trim();
+            if (query === '') { loadPage(currentTab); return; }
+            
+            document.getElementById('continue-watching-container').innerHTML = ''; 
+            document.getElementById('categories-container').innerHTML = ''; 
+            document.getElementById('grid-container').innerHTML = '<h2 style="padding:20px; grid-column: 1 / -1; text-align:center;">🔍 جاري البحث...</h2>';
+            document.getElementById('load-more-container').innerHTML = '';
+
+            let action = currentTab === 'movies' ? 'get_vod_streams' : (currentTab === 'series' ? 'get_series' : 'get_live_streams');
+            try {
+                const res = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${action}`);
+                const allItems = await res.json();
+                currentCategoryItems = allItems.filter(item => { return (item.name || item.title || '').toLowerCase().includes(query); });
+                
+                document.getElementById('grid-container').innerHTML = ''; displayedItemsCount = 0;
+                if(currentCategoryItems.length > 0) renderGridItems(currentTab === 'movies' ? 'movie' : (currentTab === 'series' ? 'series' : 'live'));
+                else document.getElementById('grid-container').innerHTML = '<h2 style="padding:20px; grid-column: 1 / -1; text-align:center;">❌ لا توجد نتائج</h2>';
+            } catch (e) { }
+        }, 800);
+    }
+
+    async function loadPage(type, navElement = null) {
+        currentTab = type;
+        if(navElement) {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            navElement.classList.add('active');
+        }
+        document.getElementById('search-input').value = '';
+        window.scrollTo(0,0);
+
+        document.getElementById('continue-watching-container').innerHTML = ''; 
+        document.getElementById('categories-container').innerHTML = '<h2 style="padding:15px; text-align:center;">جاري التحميل...</h2>';
+        document.getElementById('grid-container').innerHTML = '';
+        document.getElementById('load-more-container').innerHTML = '';
+
+        if (type === 'movies') {
+            await loadSupabaseRows('user_activity', `متابعة المشاهدة`, 'movie');
+            await fetchCategories('get_vod_categories', 'movie');
+        } else if (type === 'series') {
+            await loadSupabaseRows('user_activity', `متابعة المشاهدة`, 'series');
+            await fetchCategories('get_series_categories', 'series');
+        } else if (type === 'live') {
+            await fetchCategories('get_live_categories', 'live');
+        } else if (type === 'favorites') {
+            document.getElementById('categories-container').innerHTML = '';
+            await loadSupabaseRows('favorites', `مفضلاتي`, null);
+        }
+    }
+
+    async function fetchCategories(catAction, itemType) {
+        try {
+            const resCat = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${catAction}`);
+            const cats = await resCat.json(); 
+            
+            let html = `<div class="row-container"><div class="categories-row">`;
+            cats.forEach((cat, index) => {
+                html += `<div class="category-chip ${index === 0 ? 'active' : ''}" data-id="${cat.category_id}">${cat.category_name}</div>`;
+            });
+            html += `</div></div>`;
+            document.getElementById('categories-container').innerHTML = html;
+
+            const chips = document.querySelectorAll('.category-chip');
+            chips.forEach(chip => {
+                chip.onclick = () => {
+                    chips.forEach(c => c.classList.remove('active')); chip.classList.add('active');
+                    let streamAction = itemType === 'movie' ? 'get_vod_streams' : (itemType === 'series' ? 'get_series' : 'get_live_streams');
+                    loadCategoryItems(chip.getAttribute('data-id'), streamAction, itemType);
+                };
             });
 
-            // تحميل قسم "الكل" ليكون متاحاً للبحث الفوري مباشرة
-            fetchContent('all');
-
-        } catch (error) {
-            document.getElementById('category-selector').innerHTML = '<option value="">حدث خطأ في تحميل التصنيفات</option>';
-        }
+            if(cats.length > 0) {
+                let streamAction = itemType === 'movie' ? 'get_vod_streams' : (itemType === 'series' ? 'get_series' : 'get_live_streams');
+                loadCategoryItems(cats[0].category_id, streamAction, itemType);
+            }
+        } catch (e) {}
     }
 
-    async function fetchContent(categoryId) {
-        if (!categoryId) return;
-        
-        document.getElementById('movies-container').innerHTML = `
-            <div class="loading-text">
-                ⏳ جاري التحميل... <br><br> 
-                <small style="color: #888;">(سحب المكتبة بالكامل قد يستغرق بضع ثوانٍ)</small>
-            </div>`;
-        
-        let action = '';
-        if (currentMode === 'vod') action = 'get_vod_streams';
-        else if (currentMode === 'series') action = 'get_series';
-        else if (currentMode === 'live') action = 'get_live_streams';
-
-        // إذا تم اختيار "الكل"، نقوم بإزالة parameter الـ category_id لجلب المكتبة كاملة
-        let apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=${action}`;
-        if (categoryId !== 'all') {
-            apiUrl += `&category_id=${categoryId}`;
-        }
-        
+    async function loadCategoryItems(catId, streamAction, itemType) {
+        document.getElementById('grid-container').innerHTML = '<h2 style="padding:20px; grid-column: 1 / -1; text-align:center;">جاري تحميل المكتبة...</h2>';
+        document.getElementById('load-more-container').innerHTML = '';
         try {
-            const xtreamResponse = await fetch(apiUrl);
-            allCurrentData = await xtreamResponse.json(); 
-
-            // محاولة جلب بيانات سوبابيس (نتجاهل الخطأ إن لم تكن مربوطة)
-            let userActivity = [];
-            try {
-                const { data } = await supabaseClient
-                    .from('user_activity')
-                    .select('*')
-                    .eq('username', currentUser);
-                if (data) userActivity = data;
-            } catch(e) {}
-
-            renderDisplay(allCurrentData.slice(0, 100), userActivity); 
-        } catch (error) {
-            document.getElementById('movies-container').innerHTML = '<div class="loading-text" style="color: red;">حدث خطأ أثناء جلب البيانات.</div>';
-        }
+            const res = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${streamAction}&category_id=${catId}`);
+            currentCategoryItems = await res.json(); displayedItemsCount = 0;
+            document.getElementById('grid-container').innerHTML = '';
+            if(currentCategoryItems.length > 0) renderGridItems(itemType);
+            else document.getElementById('grid-container').innerHTML = '<h2 style="padding:20px; grid-column: 1 / -1; text-align:center;">هذا التصنيف فارغ.</h2>';
+        } catch(e) {}
     }
 
-    function filterResults() {
-        const query = document.getElementById('search-input').value.toLowerCase();
-        
-        const filteredData = allCurrentData.filter(item => {
-            const title = item.name ? item.name.toLowerCase() : "";
-            return title.includes(query);
-        });
+    function renderGridItems(type, append = false) {
+        const container = document.getElementById('grid-container');
+        if (!append) container.innerHTML = '';
 
-        renderDisplay(filteredData.slice(0, 100), []); 
-    }
-
-    function renderDisplay(items, userActivity) {
-        const container = document.getElementById('movies-container');
-        container.innerHTML = '';
-
-        if (!items || items.length === 0) {
-            container.innerHTML = '<div class="loading-text">لا يوجد محتوى في هذا التصنيف أو مطابق لبحثك.</div>';
-            return;
-        }
-
-        items.forEach(item => {
-            const id = item.stream_id || item.series_id;
-            const name = item.name;
-            const icon = item.stream_icon || item.cover || 'https://via.placeholder.com/200x250?text=بدون+صورة';
+        const nextBatch = currentCategoryItems.slice(displayedItemsCount, displayedItemsCount + ITEMS_PER_PAGE);
+        nextBatch.forEach(item => {
+            const title = item.name || item.title || 'بدون اسم';
+            const imgUrl = item.stream_icon || item.cover || '';
+            const card = document.createElement('div');
+            card.className = type === 'live' ? 'live-card' : 'card';
             
-            const activity = userActivity.find(act => act.movie_id == id);
-            const resumeTime = activity ? activity.resume_time : 0;
-            const progressPercent = resumeTime > 0 ? Math.min((resumeTime / 7200) * 100, 100) : 0;
-
-            const cardEl = document.createElement('div');
-            cardEl.className = 'movie-card';
-            
-            let actionHtml = '';
-
-            if (currentMode === 'live') {
-                const videoUrl = `${currentDomain}/${currentUser}/${currentPass}/${id}`;
-                actionHtml = `<button onclick="playMovieInApp('${videoUrl}', 0, '${id}')">📺 تشغيل القناة</button>`;
-            } else if (currentMode === 'vod') {
-                const ext = item.container_extension || "mkv";
-                const videoUrl = `${currentDomain}/movie/${currentUser}/${currentPass}/${id}.${ext}`;
-                actionHtml = `
-                    ${resumeTime > 0 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${progressPercent}%"></div></div><small style="color:#aaa;">تمت المشاهدة جزئياً</small>` : ''}
-                    <button onclick="playMovieInApp('${videoUrl}', ${resumeTime}, '${id}')">${resumeTime > 0 ? 'إكمال المشاهدة' : '▶ تشغيل الفيلم'}</button>
+            if (type === 'live') {
+                card.innerHTML = `
+                    <div class="live-img-wrapper"><div class="fallback-text">${title}</div><img src="${imgUrl}" onerror="this.style.display='none'"></div>
+                    <div class="live-title">${title}</div>
                 `;
-            } else if (currentMode === 'series') {
-                actionHtml = `<button onclick="playSeriesFirstEpisode('${id}')" style="background:#f39c12;">▶ تشغيل الحلقة 1</button>`;
+            } else {
+                card.innerHTML = `<div class="fallback-text">${title}</div><img src="${imgUrl}" onerror="this.style.display='none'">`;
             }
+            
+            card.onclick = () => {
+                if (type === 'live') {
+                    activeStreamData = { id: item.stream_id || item.id, type: 'live', name: item.name };
+                    playStream(activeStreamData.id, 'live', '');
+                } else { openDetails(item, type); }
+            };
+            container.appendChild(card);
+        });
 
-            cardEl.innerHTML = `
-                <img src="${icon}" onerror="this.src='https://via.placeholder.com/200x250?text=بدون+صورة'">
-                <h3 style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${name}">${name}</h3>
-                ${actionHtml}
-            `;
-            container.appendChild(cardEl);
+        displayedItemsCount += nextBatch.length;
+        const loadMoreContainer = document.getElementById('load-more-container');
+        if (displayedItemsCount < currentCategoryItems.length) {
+            loadMoreContainer.innerHTML = `<button class="load-more-btn" onclick="renderGridItems('${type}', true)">تحميل المزيد ↓</button>`;
+        } else { loadMoreContainer.innerHTML = ''; }
+    }
+
+    // جلب بيانات استئناف المشاهدة (Supabase)
+    async function loadSupabaseRows(tableName, rowTitle, filterType) {
+        const container = document.getElementById('continue-watching-container');
+        try {
+            let query = supabaseClient.from(tableName).select('*').eq('username', iptv.user).eq('profile_name', currentProfile);
+            if (filterType) query = query.eq('item_type', filterType);
+            if (tableName === 'user_activity') query = query.order('updated_at', { ascending: false }).limit(10);
+
+            const { data, error } = await query;
+            if(data && data.length > 0) {
+                const wrapper = document.createElement('div'); wrapper.className = 'row-container';
+                wrapper.innerHTML = `<div class="row-title" style="padding: 0 15px;">${rowTitle}</div>`;
+                const inner = document.createElement('div'); inner.className = 'row-inner';
+
+                data.forEach(row => {
+                    let obj = row.item_data; if(typeof obj === 'string') obj = JSON.parse(obj); if(!obj) return;
+                    const isLive = row.item_type === 'live';
+                    const title = obj.name || obj.title || '';
+                    const imgUrl = obj.stream_icon || obj.cover || '';
+                    
+                    const card = document.createElement('div'); card.className = isLive ? 'live-card' : 'card';
+                    
+                    let progressHtml = '';
+                    if (!isLive && tableName === 'user_activity' && row.resume_time > 0) {
+                        const progress = Math.min((row.resume_time / 7200) * 100, 100);
+                        progressHtml = `<div class="progress-bar"><div class="progress-fill" style="width: ${progress}%"></div></div>`;
+                    }
+
+                    if (isLive) card.innerHTML = `<div class="live-img-wrapper"><img src="${imgUrl}"></div><div class="live-title">${title}</div>`;
+                    else card.innerHTML = `<img src="${imgUrl}">${progressHtml}`;
+                    
+                    card.onclick = () => {
+                        if (isLive) {
+                            activeStreamData = { id: obj.stream_id || obj.id, type: 'live', name: obj.name };
+                            playStream(activeStreamData.id, 'live', '');
+                        } else {
+                            activeStreamData = { ...obj, type: row.item_type, id: row.movie_id || row.item_id, resume_time: row.resume_time, current_episode_id: obj.current_episode_id || null, current_episode_num: obj.current_episode_num || null, current_episode_ext: obj.current_episode_ext || 'mkv' };
+                            openDetails(obj, row.item_type);
+                        }
+                    };
+                    inner.appendChild(card);
+                });
+                wrapper.appendChild(inner); container.appendChild(wrapper);
+            }
+        } catch(e) {}
+    }
+
+    async function openDetails(item, type) {
+        history.pushState({view: 'details'}, 'Details', '#details');
+        document.getElementById('main-screen').classList.add('hidden');
+        document.getElementById('details-screen').classList.remove('hidden');
+        document.getElementById('details-screen').scrollTo(0,0);
+        document.getElementById('episodes-container').innerHTML = '';
+        document.getElementById('detail-progress-container').classList.add('hidden');
+        
+        const id = item.stream_id || item.series_id || (activeStreamData ? activeStreamData.id : null);
+        
+        try {
+            const { data: currentAct } = await supabaseClient.from('user_activity').select('*').eq('username', iptv.user).eq('profile_name', currentProfile).eq('movie_id', String(id)).maybeSingle();
+            if(currentAct) {
+                let parsedData = currentAct.item_data; if(typeof parsedData === 'string') parsedData = JSON.parse(parsedData);
+                activeStreamData = { ...item, type, id, resume_time: currentAct.resume_time, current_episode_id: parsedData.current_episode_id || null, current_episode_num: parsedData.current_episode_num || null, current_episode_ext: parsedData.current_episode_ext || 'mkv' };
+            } else { activeStreamData = { ...item, type, id, resume_time: 0 }; }
+        } catch (err) { activeStreamData = { ...item, type, id, resume_time: 0 }; }
+
+        document.getElementById('detail-title').innerText = item.name || item.title || 'بدون اسم';
+        document.getElementById('detail-poster').src = item.stream_icon || item.cover;
+        document.getElementById('details-screen').style.backgroundImage = `url('${item.stream_icon || item.cover}')`;
+
+        let action = type === 'movie' ? `get_vod_info&vod_id=${id}` : `get_series_info&series_id=${id}`;
+        try {
+            const res = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${action}`);
+            const data = await res.json(); const info = data.info || {};
+            
+            document.getElementById('detail-desc').innerText = info.plot || info.description || 'لا يوجد وصف متاح.';
+            let year = info.year || info.releasedate || 'غير متوفر';
+            let genre = info.genre || 'غير مصنف';
+            let durationOrSeasons = type === 'movie' ? (info.duration || info.runtime || '') : (data.episodes ? `${Object.keys(data.episodes).length} مواسم` : '');
+            
+            document.getElementById('detail-meta').innerHTML = `<span>📅 ${year}</span> | <span>🎬 ${genre}</span> | <span>⏱ ${durationOrSeasons}</span>`;
+
+            let actionsHtml = '';
+            const favBtnHtml = `<button class="action-btn fav" id="fav-btn" onclick="toggleFavorite()">❤ إضافة للمفضلة</button>`;
+
+            if (type === 'movie') {
+                actionsHtml = `<button class="action-btn play" onclick="playStream('${id}', 'movie', '${item.container_extension || 'mkv'}')">▶ تشغيل الفيلم</button>` + favBtnHtml;
+                document.getElementById('series-episodes-col').classList.add('hidden'); 
+                
+                if (activeStreamData.resume_time > 0) {
+                    const prog = Math.min((activeStreamData.resume_time / 7200) * 100, 100);
+                    document.getElementById('detail-progress-container').classList.remove('hidden');
+                    document.getElementById('detail-progress-fill').style.width = prog + '%';
+                }
+            } else if (type === 'series') {
+                actionsHtml = favBtnHtml;
+                if (activeStreamData.current_episode_id && activeStreamData.resume_time > 0) {
+                    actionsHtml = `<button class="action-btn play" onclick="resumeSeriesPlayback()">▶ إكمال الحلقة ${activeStreamData.current_episode_num}</button>` + actionsHtml;
+                }
+                if (data.episodes) actionsHtml += `<select id="season-selector" class="seasons-select"></select>`;
+                document.getElementById('series-episodes-col').classList.remove('hidden'); 
+
+                flatEpisodes = [];
+                let sortedSeasons = Object.keys(data.episodes).sort((a, b) => Number(a) - Number(b));
+                sortedSeasons.forEach(s => {
+                    let eps = data.episodes[s].sort((a, b) => Number(a.episode_num) - Number(b.episode_num));
+                    flatEpisodes = flatEpisodes.concat(eps);
+                });
+            }
+            
+            document.getElementById('detail-actions').innerHTML = actionsHtml;
+            checkIfFavorite(); 
+            if (type === 'series' && data.episodes) renderSeasons(data.episodes);
+        } catch (e) {}
+    }
+
+    function resumeSeriesPlayback() {
+        if (activeStreamData && activeStreamData.current_episode_id) playStream(activeStreamData.current_episode_id, 'series', activeStreamData.current_episode_ext || 'mkv');
+    }
+
+    async function checkIfFavorite() {
+        const { data } = await supabaseClient.from('favorites').select('id').eq('username', iptv.user).eq('profile_name', currentProfile).eq('item_id', String(activeStreamData.id));
+        const favBtn = document.getElementById('fav-btn');
+        if (data && data.length > 0) { favBtn.innerText = '❌ إزالة من المفضلة'; favBtn.style.background = 'var(--primary)'; favBtn.style.color = 'white'; }
+    }
+
+    async function toggleFavorite() {
+        const { data } = await supabaseClient.from('favorites').select('id').eq('username', iptv.user).eq('profile_name', currentProfile).eq('item_id', String(activeStreamData.id));
+        const favBtn = document.getElementById('fav-btn');
+        if (data && data.length > 0) {
+            await supabaseClient.from('favorites').delete().eq('id', data[0].id);
+            favBtn.innerText = '❤ إضافة للمفضلة'; favBtn.style.background = 'rgba(50,50,50,0.8)';
+            showToast('تم الحذف من المفضلات');
+        } else {
+            await supabaseClient.from('favorites').insert([{ username: iptv.user, profile_name: currentProfile, item_id: String(activeStreamData.id), item_type: activeStreamData.type, item_data: activeStreamData }]);
+            favBtn.innerText = '❌ إزالة من المفضلة'; favBtn.style.background = 'var(--primary)';
+            showToast('تم الحفظ بالمفضلة');
+        }
+    }
+
+    function renderSeasons(episodesObj) {
+        const select = document.getElementById('season-selector'); select.innerHTML = '';
+        const seasons = Object.keys(episodesObj);
+        seasons.forEach(s => { let opt = document.createElement('option'); opt.value = s; opt.innerText = `الموسم ${s}`; select.appendChild(opt); });
+        select.onchange = () => renderEpisodes(episodesObj[select.value]);
+        if(seasons.length > 0) renderEpisodes(episodesObj[seasons[0]]);
+    }
+
+    function renderEpisodes(epsList) {
+        const container = document.getElementById('episodes-container'); container.innerHTML = '';
+        epsList.forEach(ep => {
+            let progressHtml = '';
+            if (activeStreamData && activeStreamData.current_episode_id == ep.id && activeStreamData.resume_time > 0) {
+                const prog = Math.min((activeStreamData.resume_time / 3000) * 100, 100);
+                progressHtml = `<div class="ep-progress"><div class="ep-progress-fill" style="width:${prog}%"></div></div>`;
+            }
+            const div = document.createElement('div'); div.className = 'ep-card';
+            div.innerHTML = `<span>الحلقة ${ep.episode_num || '-'}</span> <span>▶</span> ${progressHtml}`;
+            div.onclick = () => {
+                activeStreamData.current_episode_id = String(ep.id);
+                activeStreamData.current_episode_num = ep.episode_num;
+                activeStreamData.current_episode_ext = ep.container_extension || 'mkv';
+                activeStreamData.resume_time = 0; 
+                playStream(ep.id, 'series', ep.container_extension || 'mkv');
+            }; 
+            container.appendChild(div);
         });
     }
 
-    async function playSeriesFirstEpisode(seriesId) {
-        const apiUrl = `${currentDomain}/player_api.php?username=${currentUser}&password=${currentPass}&action=get_series_info&series_id=${seriesId}`;
+    const video = document.getElementById('tv-video');
+    
+    // دالة التشغيل المدمجة مع خادم Proxy لتشغيل الـ MKV على الآيفون
+    function playStream(id, type, ext) {
+        let originalUrl = type === 'live' ? `${iptv.domain}/${iptv.user}/${iptv.pass}/${id}` : `${iptv.domain}/${type === 'movie' ? 'movie' : 'series'}/${iptv.user}/${iptv.pass}/${id}.${ext}`;
+        let finalUrl = originalUrl;
+
+        // 🔴🔴 تنبيه: توجيه مسار الفيديو لخادم التحويل الذي أنشأته سابقاً 🔴🔴
+        if (type !== 'live') {
+            const proxyBaseUrl = 'https://amjad-iptv.duckdns.org/stream?url='; 
+            finalUrl = proxyBaseUrl + encodeURIComponent(originalUrl);
+        }
+
+        history.pushState({view: 'player'}, 'Player', '#player');
+        document.getElementById('details-screen').classList.add('hidden');
+        document.getElementById('main-screen').classList.add('hidden');
+        document.getElementById('player-container').classList.remove('hidden');
         
-        try {
-            const response = await fetch(apiUrl);
-            const data = await response.json();
-            
-            const seasons = Object.keys(data.episodes);
-            if (seasons.length > 0) {
-                const firstEpisode = data.episodes[seasons[0]][0];
-                const ext = firstEpisode.container_extension || 'mkv';
-                const videoUrl = `${currentDomain}/series/${currentUser}/${currentPass}/${firstEpisode.id}.${ext}`;
-                
-                playMovieInApp(videoUrl, 0, firstEpisode.id);
-            } else {
-                alert("عفواً، لا توجد حلقات متاحة لهذا المسلسل حالياً.");
+        isPlaying = true; video.src = finalUrl; video.load(); 
+        video.onloadedmetadata = () => {
+            if (activeStreamData && activeStreamData.resume_time > 0 && type !== 'live') {
+                video.currentTime = activeStreamData.resume_time;
+                showToast(`تم استئناف العرض`);
             }
-        } catch (error) {
-            alert("حدث خطأ أثناء محاولة جلب المسلسل.");
-        }
+        };
+        video.play().catch(e => showToast("خطأ في تشغيل الفيديو"));
     }
 
-    function playMovieInApp(videoUrl, resumeTime, movieId) {
-        currentMovieId = movieId;
-        const message = { type: 'PLAY_MOVIE', url: videoUrl, resumeTime: resumeTime };
+    function closePlayer() {
+        isPlaying = false; video.pause(); video.src = '';
+        document.getElementById('player-container').classList.add('hidden');
+        history.back();
+    }
 
-        if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify(message));
+    video.addEventListener('timeupdate', () => {
+        if (!isPlaying || !activeStreamData) return;
+        if (activeStreamData.type !== 'live' && Math.floor(video.currentTime) > 0 && Math.floor(video.currentTime) % 15 === 0) {
+            saveActivity(Math.floor(video.currentTime));
+        }
+    });
+
+    async function saveActivity(time) {
+        try {
+            await supabaseClient.from('user_activity').upsert({
+                username: iptv.user, profile_name: currentProfile, movie_id: String(activeStreamData.id), 
+                item_type: activeStreamData.type, resume_time: time, item_data: activeStreamData, updated_at: new Date().toISOString()
+            }, { onConflict: 'username,profile_name,movie_id' });
+        } catch(e) {}
+    }
+
+    // دعم زر الرجوع (Swipe Back) في الآيفون
+    window.addEventListener('popstate', (e) => {
+        if (isPlaying) {
+            closePlayer();
+            if(activeStreamData && activeStreamData.type === 'live') { document.getElementById('main-screen').classList.remove('hidden'); } 
+            else { document.getElementById('details-screen').classList.remove('hidden'); }
         } else {
-            alert("محاكاة التشغيل للتطبيق:\n" + videoUrl + "\nوقت البدء: " + resumeTime);
+            document.getElementById('details-screen').classList.add('hidden');
+            document.getElementById('main-screen').classList.remove('hidden');
+            loadPage(currentTab); 
         }
-    }
-
-    window.updateWatchProgress = async function(currentSeconds) {
-        if (!currentMovieId || !currentUser || currentMode === 'live') return; 
-        
-        await supabaseClient
-            .from('user_activity')
-            .upsert({ 
-                username: currentUser, 
-                movie_id: currentMovieId, 
-                resume_time: currentSeconds 
-            }, { onConflict: 'username, movie_id' });
-    };
+    });
 </script>
 </body>
 </html>
