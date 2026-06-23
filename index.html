@@ -270,7 +270,7 @@
     </div>
 
 <script>
-    // تم الإبقاء على مفاتيح Supabase كما وردت في الكود الأصلي
+    // مفاتيح قاعدة البيانات
     const supabaseUrl = 'https://kpfymvtyqbyjmlqfgujo.supabase.co';
     const supabaseKey = 'sb_publishable_g7dHfpmPHcQwAWsO9FFuGw_4lG8fyLc';
     const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
@@ -285,7 +285,25 @@
     let flatEpisodes = [];
     let currentCategoryItems = [];
     let displayedItemsCount = 0;
-    const ITEMS_PER_PAGE = 30; // تقليل العدد للموبايل لتخفيف الحمل
+    const ITEMS_PER_PAGE = 30;
+
+    // 🌟 الدالة السحرية الجديدة لتجاوز حظر المتصفحات (CORS / Mixed Content) 🌟
+    async function fetchIPTV(url) {
+        // إضافة طابع زمني لمنع تخزين البيانات القديمة (Cache)
+        const timestampUrl = url + (url.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
+        
+        try {
+            // المحاولة الأولى: الاتصال المباشر
+            const res = await fetch(timestampUrl);
+            if (!res.ok) throw new Error('Network Error');
+            return await res.json();
+        } catch (e) {
+            // المحاولة الثانية: إذا تم الحظر، نستخدم بروكسي عبور مجاني وآمن للبيانات النصية (JSON)
+            const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(timestampUrl);
+            const proxyRes = await fetch(proxyUrl);
+            return await proxyRes.json();
+        }
+    }
 
     function showToast(msg) {
         const t = document.getElementById('toast');
@@ -300,7 +318,7 @@
         }
     };
 
-    // الدخول والتحقق (نفس المنطق القديم)
+    // الدخول والتحقق
     async function login() {
         const d = document.getElementById('iptv-domain').value.trim();
         const u = document.getElementById('iptv-user').value.trim();
@@ -312,8 +330,9 @@
         btn.innerText = 'جاري التحقق...'; btn.disabled = true;
 
         try {
-            const res = await fetch(`${cleanDomain}/player_api.php?username=${u}&password=${p}`);
-            const data = await res.json();
+            // استخدام دالة العبور الجديدة بدلاً من fetch العادية
+            const data = await fetchIPTV(`${cleanDomain}/player_api.php?username=${u}&password=${p}`);
+            
             if (data && data.user_info && data.user_info.auth === 1) {
                 iptv.domain = cleanDomain; iptv.user = u; iptv.pass = p;
                 localStorage.setItem('iptv_domain', cleanDomain); localStorage.setItem('iptv_user', u); localStorage.setItem('iptv_pass', p);
@@ -322,7 +341,7 @@
                 fetchProfilesFromSupabase();
             } else { throw new Error('بيانات الدخول غير صحيحة'); }
         } catch (e) {
-            showToast('فشل الاتصال');
+            showToast('فشل الاتصال. تأكد من صحة البيانات أو الرابط.');
             btn.innerText = 'دخول'; btn.disabled = false;
         }
     }
@@ -331,7 +350,6 @@
         localStorage.clear(); location.reload();
     }
 
-    // جلب الحسابات من Supabase
     async function fetchProfilesFromSupabase() {
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('profiles-screen').classList.remove('hidden');
@@ -364,7 +382,6 @@
         loadPage('movies', document.querySelector('.nav-item'));
     }
 
-    // البحث والتنقل
     function handleSearch() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(async () => {
@@ -378,8 +395,7 @@
 
             let action = currentTab === 'movies' ? 'get_vod_streams' : (currentTab === 'series' ? 'get_series' : 'get_live_streams');
             try {
-                const res = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${action}`);
-                const allItems = await res.json();
+                const allItems = await fetchIPTV(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${action}`);
                 currentCategoryItems = allItems.filter(item => { return (item.name || item.title || '').toLowerCase().includes(query); });
                 
                 document.getElementById('grid-container').innerHTML = ''; displayedItemsCount = 0;
@@ -419,8 +435,7 @@
 
     async function fetchCategories(catAction, itemType) {
         try {
-            const resCat = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${catAction}`);
-            const cats = await resCat.json(); 
+            const cats = await fetchIPTV(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${catAction}`);
             
             let html = `<div class="row-container"><div class="categories-row">`;
             cats.forEach((cat, index) => {
@@ -449,8 +464,8 @@
         document.getElementById('grid-container').innerHTML = '<h2 style="padding:20px; grid-column: 1 / -1; text-align:center;">جاري تحميل المكتبة...</h2>';
         document.getElementById('load-more-container').innerHTML = '';
         try {
-            const res = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${streamAction}&category_id=${catId}`);
-            currentCategoryItems = await res.json(); displayedItemsCount = 0;
+            currentCategoryItems = await fetchIPTV(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${streamAction}&category_id=${catId}`);
+            displayedItemsCount = 0;
             document.getElementById('grid-container').innerHTML = '';
             if(currentCategoryItems.length > 0) renderGridItems(itemType);
             else document.getElementById('grid-container').innerHTML = '<h2 style="padding:20px; grid-column: 1 / -1; text-align:center;">هذا التصنيف فارغ.</h2>';
@@ -493,7 +508,6 @@
         } else { loadMoreContainer.innerHTML = ''; }
     }
 
-    // جلب بيانات استئناف المشاهدة (Supabase)
     async function loadSupabaseRows(tableName, rowTitle, filterType) {
         const container = document.getElementById('continue-watching-container');
         try {
@@ -564,8 +578,8 @@
 
         let action = type === 'movie' ? `get_vod_info&vod_id=${id}` : `get_series_info&series_id=${id}`;
         try {
-            const res = await fetch(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${action}`);
-            const data = await res.json(); const info = data.info || {};
+            const data = await fetchIPTV(`${iptv.domain}/player_api.php?username=${iptv.user}&password=${iptv.pass}&action=${action}`);
+            const info = data.info || {};
             
             document.getElementById('detail-desc').innerText = info.plot || info.description || 'لا يوجد وصف متاح.';
             let year = info.year || info.releasedate || 'غير متوفر';
@@ -663,14 +677,14 @@
 
     const video = document.getElementById('tv-video');
     
-    // دالة التشغيل المدمجة مع خادم Proxy لتشغيل الـ MKV على الآيفون
+    // دالة التشغيل
     function playStream(id, type, ext) {
         let originalUrl = type === 'live' ? `${iptv.domain}/${iptv.user}/${iptv.pass}/${id}` : `${iptv.domain}/${type === 'movie' ? 'movie' : 'series'}/${iptv.user}/${iptv.pass}/${id}.${ext}`;
         let finalUrl = originalUrl;
 
-        // 🔴🔴 تنبيه: توجيه مسار الفيديو لخادم التحويل الذي أنشأته سابقاً 🔴🔴
+        // توجيه مسار الفيديو لخادم التحويل الذي أنشأته سابقاً (DuckDNS) 🔴 تأكد من تعديل الرابط 🔴
         if (type !== 'live') {
-            const proxyBaseUrl = 'https://amjad-iptv.duckdns.org/stream?url='; 
+            const proxyBaseUrl = 'https://رابط_السيرفر_الخاص_بك_هنا.duckdns.org/stream?url='; 
             finalUrl = proxyBaseUrl + encodeURIComponent(originalUrl);
         }
 
@@ -711,7 +725,6 @@
         } catch(e) {}
     }
 
-    // دعم زر الرجوع (Swipe Back) في الآيفون
     window.addEventListener('popstate', (e) => {
         if (isPlaying) {
             closePlayer();
