@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>مشغل IPTV السحابي (النسخة المتطورة)</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { font-family: Tahoma, sans-serif; background-color: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 900px; }
+        .login-panel { background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .row { display: flex; gap: 10px; width: 100%; }
+        input[type="text"], input[type="password"] { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #333; background-color: #252525; color: white; }
+        button { padding: 12px; border-radius: 4px; border: none; background-color: #444; color: white; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #555; }
+        #errorBox { display: none; background-color: #441111; color: #ff5555; padding: 15px; border-radius: 4px; border: 1px solid #ff5555; margin-bottom: 20px; font-weight: bold; }
+        video { width: 100%; background-color: #000; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+        .video-list { max-height: 400px; overflow-y: auto; background-color: #1e1e1e; border-radius: 8px; padding: 10px; list-style: none; margin: 0; }
+        .video-item { padding: 12px; border-bottom: 1px solid #2d2d2d; cursor: pointer; display: flex; justify-content: space-between; }
+        .video-item:hover { background-color: #2a2a2a; }
+        .active-item { background-color: #444 !important; font-weight: bold; border-right: 4px solid #fff; }
+        .direct-link-btn { background-color: #0056b3; padding: 5px 10px; border-radius: 4px; font-size: 12px; text-decoration: none; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="errorBox"></div>
+
+    <div class="login-panel">
+        <input type="text" id="xtHost" placeholder="رابط الخادم (يُفضل أن يبدأ بـ http://)">
+        <div class="row">
+            <input type="text" id="xtUser" placeholder="اسم المستخدم">
+            <input type="password" id="xtPass" placeholder="كلمة المرور">
+        </div>
+        <button onclick="loginXtreamAPI()">جلب مكتبة الأفلام</button>
+        <input type="text" id="searchInput" placeholder="ابحث عن فيلم..." onkeyup="filterList()" style="display: none; margin-top: 10px;">
+    </div>
+
+    <video id="videoPlayer" controls playsinline preload="auto" style="width: 100%; border-radius: 8px; background: #000;"></video>
+    <ul id="videoList" class="video-list">
+        <li style="padding: 10px; color: #888;">أدخل البيانات واضغط جلب...</li>
+    </ul>
+</div>
+
+<script>
+    // الإعدادات الرئيسية للسيرفر
+    const ORACLE_SERVER = 'http://145.241.120.175:3000';
+    let currentStreamKey = null;
+    let hls = null;
+
+    const video = document.getElementById('videoPlayer');
+    const errorBox = document.getElementById('errorBox');
+
+    // دالة عرض الرسائل (أحمر للخطأ، أخضر للنجاح والانتظار)
+    function showError(message, type = 'error') {
+        errorBox.style.display = 'block';
+        errorBox.innerText = message;
+        if (type === 'success') {
+            errorBox.style.backgroundColor = '#114411';
+            errorBox.style.color = '#55ff55';
+            errorBox.style.borderColor = '#55ff55';
+        } else {
+            errorBox.style.backgroundColor = '#441111';
+            errorBox.style.color = '#ff5555';
+            errorBox.style.borderColor = '#ff5555';
+        }
+    }
+
+    function hideError() {
+        errorBox.style.display = 'none';
+        errorBox.innerText = '';
+    }
+
+    async function loginXtreamAPI() {
+        hideError();
+        let host = document.getElementById('xtHost').value.trim();
+        const user = document.getElementById('xtUser').value.trim();
+        const pass = document.getElementById('xtPass').value.trim();
+
+        if (!host || !user || !pass) {
+            showError('الرجاء إدخال جميع البيانات.');
+            return;
+        }
+
+        if (!host.startsWith('http://') && !host.startsWith('https://')) {
+            host = 'http://' + host; 
+        }
+        if (host.endsWith('/')) host = host.slice(0, -1);
+
+        const listContainer = document.getElementById('videoList');
+        listContainer.innerHTML = '<li style="padding: 10px; color: #888;">جاري الاتصال بالسيرفر وجلب البيانات...</li>';
+
+        // توجيه طلب القائمة عبر سيرفر أوراكل لتخطي قيود المتصفح (CORS)
+        const apiUrl = `${host}/player_api.php?username=${user}&password=${pass}&action=get_vod_streams`;
+        const finalUrl = `${ORACLE_SERVER}/api?url=${encodeURIComponent(apiUrl)}`;
+
+        try {
+            const response = await fetch(finalUrl);
+            if (!response.ok) throw new Error(`مشكلة في الاتصال (الرمز: ${response.status})`);
+
+            const fetchedData = await response.json();
+
+            if (fetchedData.user_info && fetchedData.user_info.auth === 0) {
+                listContainer.innerHTML = '<li></li>';
+                showError('بيانات الدخول غير صحيحة.');
+                return;
+            }
+
+            if (!Array.isArray(fetchedData) || fetchedData.length === 0) {
+                listContainer.innerHTML = '<li></li>';
+                showError('قائمة الأفلام فارغة.');
+                return;
+            }
+
+            listContainer.innerHTML = '';
+            document.getElementById('searchInput').style.display = 'block';
+
+            fetchedData.forEach((item) => {
+                const li = document.createElement('li');
+                li.className = 'video-item';
+                const ext = item.container_extension ? item.container_extension : 'mp4';
+
+                // الرابط المباشر من المزود
+                const videoUrl = `${host}/movie/${user}/${pass}/${item.stream_id}.${ext}`;
+
+                // بناء واجهة العنصر
+                li.innerHTML = `
+                    <span onclick="playSmartVideo('${videoUrl}', this)" style="flex: 1;">${item.name} (${ext})</span>
+                    <a href="${videoUrl}" target="_blank" class="direct-link-btn" title="اختبار الرابط الخارجي">🔗 فتح مباشراً</a>
+                `;
+
+                listContainer.appendChild(li);
+            });
+
+        } catch (error) {
+            listContainer.innerHTML = '<li></li>';
+            showError(`فشل الاتصال: ${error.message} - تأكد من أن سيرفر أوراكل يعمل.`);
+        }
+    }
+
+    function filterList() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        const items = document.querySelectorAll('.video-item');
+        items.forEach(item => {
+            const text = item.innerText.toLowerCase();
+            item.style.display = text.includes(query) ? 'flex' : 'none';
+        });
+    }
+
+    // دالة إيقاف البث السابقة وقتل العملية في أوراكل لمنع خطأ 456
+    function stopCurrentStream() {
+        if (hls) {
+            hls.destroy();
+            hls = null;
+        }
+        video.pause();
+        video.src = "";
+        
+        if (currentStreamKey) {
+            // إرسال طلب صامت لأوراكل لإنهاء FFmpeg
+            fetch(`${ORACLE_SERVER}/stop/${currentStreamKey}`, { method: 'DELETE' }).catch(e => console.log(e));
+            currentStreamKey = null;
+        }
+    }
+
+    // دالة التشغيل الذكية المرتبطة بمعمارية HLS الجديدة
+    async function playSmartVideo(url, elementSpan) {
+        hideError();
+        const liElement = elementSpan.parentElement;
+        document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active-item'));
+        liElement.classList.add('active-item');
+
+        // تنظيف أي بث سابق قبل بدء الجديد
+        stopCurrentStream();
+
+        showError('🎬 جاري تحضير البث وبناء الملفات على السيرفر (يستغرق من 5 إلى 10 ثوانٍ)...', 'success');
+
+        try {
+            // الطلب من أوراكل أن يسحب الفيلم ويقطعه إلى HLS
+            const response = await fetch(`${ORACLE_SERVER}/stream?url=${encodeURIComponent(url)}`);
+            if (!response.ok) throw new Error('فشل السيرفر في تجهيز البث');
+            
+            const data = await response.json();
+
+            if (data.url) {
+                hideError();
+                currentStreamKey = data.streamKey; // حفظ المفتاح لإغلاقه لاحقاً
+                
+                // الرابط النهائي لقائمة تشغيل m3u8
+                const fullHlsUrl = `${ORACLE_SERVER}${data.url}`;
+
+                // تشغيل HLS حسب توافق المتصفح
+                if (Hls.isSupported()) {
+                    hls = new Hls({ debug: false });
+                    hls.loadSource(fullHlsUrl);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        video.play().catch(e => console.log("تحتاج للتفاعل مع الصفحة للتشغيل"));
+                    });
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        if (data.fatal) {
+                            stopCurrentStream();
+                            showError(`خطأ في البث: المتصفح لا يستطيع قراءة هذه القناة.`);
+                        }
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // لمستخدمي الآيفون (سفاري يدعم HLS مباشرة)
+                    video.src = fullHlsUrl;
+                    video.play().catch(e => console.log(e));
+                }
+            }
+        } catch (error) {
+            showError(`فشل التشغيل: ${error.message} - قد يكون الفيلم غير متاح أو السيرفر مغلق.`);
+        }
+    }
+
+    // قتل الاتصال فوراً عند خروج المستخدم من الصفحة أو إغلاق المتصفح
+    window.addEventListener('beforeunload', stopCurrentStream);
+</script>
+
+</body>
+</html>
