@@ -1,20 +1,45 @@
-name: Build App
-on:
-  push:
-    branches:
-      - main
+name: Build Unsigned iOS App
+on: 
+  workflow_dispatch: # هذا السطر يسمح لك بتشغيل البناء يدوياً بضغطة زر
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest # نطلب من جتهب استخدام جهاز ماك
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
           node-version: 18
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
-      - name: Build App
-        run: eas build --profile development --platform android --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Expo Prebuild (Generate iOS code)
+        run: npx expo prebuild --platform ios
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: Build Unsigned App (بدون شهادات أبل)
+        run: |
+          cd ios
+          # استبدل MyIPTVApp باسم تطبيقك الفعلي الموجود في ملف app.json
+          xcodebuild -workspace iphone-iptv.xcworkspace -scheme iphone-iptv -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -derivedDataPath build
+
+      - name: Create IPA file
+        run: |
+          mkdir -p Payload
+          # تأكد من تطابق اسم MyIPTVApp.app مع اسم تطبيقك
+          mv ios/build/Build/Products/Release-iphoneos/iphone-iptv.app Payload/
+          zip -r app.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: iphone-iptv-IPA
+          path: app.ipa
