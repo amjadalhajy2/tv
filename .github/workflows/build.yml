@@ -1,16 +1,16 @@
 name: Build Unsigned iOS App
 on: 
-  workflow_dispatch: # هذا السطر يسمح لك بتشغيل البناء يدوياً بضغطة زر
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest # نطلب من جتهب استخدام جهاز ماك
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
@@ -25,21 +25,26 @@ jobs:
           cd ios
           pod install
 
-      - name: Build Unsigned App (بدون شهادات أبل)
+      - name: Build Unsigned App (Dynamic Name)
         run: |
           cd ios
-          # استبدل MyIPTVApp باسم تطبيقك الفعلي الموجود في ملف app.json
-          xcodebuild -workspace iphone-iptv.xcworkspace -scheme iphone-iptv -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -derivedDataPath build
+          # البحث التلقائي عن اسم مساحة العمل والمخطط (Workspace & Scheme)
+          WORKSPACE_NAME=$(ls | grep .xcworkspace | head -1)
+          SCHEME_NAME=$(basename "$WORKSPACE_NAME" .xcworkspace)
+          
+          echo "Building Scheme: $SCHEME_NAME"
+          
+          xcodebuild -workspace "$WORKSPACE_NAME" -scheme "$SCHEME_NAME" -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -derivedDataPath build
 
       - name: Create IPA file
         run: |
           mkdir -p Payload
-          # تأكد من تطابق اسم MyIPTVApp.app مع اسم تطبيقك
-          mv ios/build/Build/Products/Release-iphoneos/iphone-iptv.app Payload/
+          # نقل التطبيق أياً كان اسمه التلقائي
+          mv ios/build/Build/Products/Release-iphoneos/*.app Payload/
           zip -r app.ipa Payload
 
       - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: iphone-iptv-IPA
           path: app.ipa
